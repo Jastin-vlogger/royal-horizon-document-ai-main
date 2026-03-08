@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+requirement.md
+poetry.lock
+.pytest_cache/
+.mypy_cache/
+prompts.py
