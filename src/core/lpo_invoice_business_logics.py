@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 from src.core.llm import invoke_vision_extraction
 from src.prompts.lpo_invoice import get_lpo_invoice_system_prompt
 from src.schemas.response import ExtractionMetadata, LPOInvoiceResult
+from src.config.logger import logger
 
 
 def _parse_json_from_content(content: str) -> Optional[dict]:
@@ -26,19 +27,24 @@ def _parse_json_from_content(content: str) -> Optional[dict]:
         return None
 
 
-async def extract_lpo_invoice(image_bytes: bytes) -> Tuple[Optional[LPOInvoiceResult], Optional[ExtractionMetadata]]:
+async def extract_lpo_invoice(
+    image_bytes: bytes,
+) -> Tuple[Optional[LPOInvoiceResult], Optional[ExtractionMetadata]]:
     """
     Run LPO extraction on the given image bytes.
     Returns (parsed result, metadata). Result is None if parsing failed.
     """
+    logger.debug("Extracting LPO Invoice")
     system_prompt = get_lpo_invoice_system_prompt()
     content, metadata = await invoke_vision_extraction(
         system_prompt=system_prompt,
         image_bytes=image_bytes,
         user_text="Extract the required fields and return only valid JSON.",
     )
+    logger.debug(f"LPO Invoice Extracted: {content}")
     data = _parse_json_from_content(content)
     if data is None:
+        logger.warning("LPO Invoice Parsed Failed, returning None")
         return None, metadata
     # If model returned a list (multiple line items), take first and flatten
     if isinstance(data, list) and len(data) > 0:
@@ -46,5 +52,7 @@ async def extract_lpo_invoice(image_bytes: bytes) -> Tuple[Optional[LPOInvoiceRe
     try:
         result = LPOInvoiceResult(**data)
     except Exception:
+        logger.warning("LPO Invoice Parsed Failed, returning None")
         result = LPOInvoiceResult()
+    logger.debug(f"LPO Invoice Result: {result}")
     return result, metadata

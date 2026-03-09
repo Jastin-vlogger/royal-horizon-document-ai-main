@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from src.config.logger import get_logger
+from src.config.logger import logger
 from src.core.document_processor import (
     detect_file_type,
     load_image_bytes,
@@ -21,7 +21,6 @@ from src.schemas.response import (
 )
 
 router = APIRouter(prefix="", tags=["extraction"])
-logger = get_logger()
 
 # Form field names for the two document types
 PERFORMA_INVOICE_FIELD = "performa_invoice"
@@ -65,6 +64,7 @@ async def shipment_form(
     Converts PDFs to first-page images, runs document-specific extraction with GPT Vision,
     and returns combined structured JSON with optional usage metadata.
     """
+    logger.debug("Processing Shipment Form API")
     inco_list = _parse_list_form(inco_terms_list)
     if not inco_list:
         inco_list = ["CIF", "FOB", "EXWORKS"]

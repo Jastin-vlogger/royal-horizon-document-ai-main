@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 from src.core.llm import invoke_vision_extraction
 from src.prompts.performa_invoice import get_performa_invoice_system_prompt
 from src.schemas.response import ExtractionMetadata, PerformaInvoiceResult
+from src.config.logger import logger
 
 
 def _parse_json_from_content(content: str) -> Optional[dict]:
@@ -35,6 +36,7 @@ async def extract_performa_invoice(
     inco_terms_list and suppliers are injected into the prompt for validation/matching.
     Returns (parsed result, metadata). Result is None if parsing failed.
     """
+    logger.debug("Extracting Performa Invoice")
     system_prompt = get_performa_invoice_system_prompt(
         inco_terms_list=inco_terms_list,
         suppliers=suppliers,
@@ -44,11 +46,15 @@ async def extract_performa_invoice(
         image_bytes=image_bytes,
         user_text="Extract the required fields and return only valid JSON.",
     )
+    logger.debug(f"Performa Invoice Extracted: {content}")
     data = _parse_json_from_content(content)
     if data is None:
+        logger.warning("Performa Invoice Parsed Failed, returning None")
         return None, metadata
     try:
         result = PerformaInvoiceResult(**data)
     except Exception:
+        logger.warning("Performa Invoice Parsed Failed, returning None")
         result = PerformaInvoiceResult()
+    logger.debug(f"Performa Invoice Result: {result}")
     return result, metadata
