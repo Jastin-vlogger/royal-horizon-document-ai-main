@@ -211,3 +211,4 @@ poetry.lock
 .pytest_cache/
 .mypy_cache/
 prompts.py
+.cursor

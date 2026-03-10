@@ -31,6 +31,7 @@ class LPOInvoiceResult(BaseModel):
     quantity: Optional[str] = None
     unit: Optional[str] = None
     price: Optional[str] = None
+    packaging: Optional[str] = None
 
 
 class PerformaInvoiceResult(BaseModel):
@@ -49,7 +50,6 @@ class PerformaInvoiceResult(BaseModel):
     total_price: Optional[str] = None
     partial_shipment: Optional[str] = None
     shipment_terms: Optional[str] = None
-    packaging: Optional[str] = None
     brand: Optional[str] = None
     payment_terms: Optional[str] = None
 

@@ -52,6 +52,8 @@ The table has these columns (left to right):
 
 9. **price**: "Total Price" column. Numeric value exactly as shown.
 
+10. **packaging**: From the "Description" column. Extract ONLY the measurable terms related to packaging size/weight (e.g., "10KG", "15KG", "20KG", "40kg", "5L"). Do NOT extract the entire text. For example, if it says "20KG POUCH BAG WITH TRANSPARENT PP OUTER", extract exactly "20KG".
+
 ---
 
 ## OUTPUT FORMAT
@@ -67,7 +69,8 @@ Return ONLY a valid JSON object. No explanation, no markdown, no extra text. Exa
   "item": "...",
   "quantity": "...",
   "unit": "...",
-  "price": "..."
+  "price": "...",
+  "packaging": "..."
 }
 
 If multiple line items exist, return a single object with the first line item's values (po_number, po_date, vendor repeated). For quantity, unit, price use the first row or aggregate as appropriate for a single JSON.

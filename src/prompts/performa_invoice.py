@@ -96,15 +96,11 @@ Extract the following fields by MEANING, not by exact label name. Use semantic u
 - **What to find**: Special shipment schedule, frequency, or conditions (different from inco_terms).
 - **Rule**: Extract the shipment schedule/condition text. If multiple, concatenate with " | ".
 
-### 12. `packaging`
-- **What to find**: Physical packaging description (inside Description column).
-- **Rule**: Extract the full packaging description.
-
-### 13. `brand`
+### 12. `brand`
 - **What to find**: The product/commodity brand name.
 - **Rule**: Extract the brand name only. If "EXTERNAL BRAND" or "NO BRAND", return as-is.
 
-### 14. `payment_terms`
+### 13. `payment_terms`
 - **What to find**: How and when payment is to be made.
 - **Rule**: Extract the full payment term text.
 
@@ -134,7 +130,6 @@ Return ONLY a valid JSON object. No explanation, no markdown fences, no extra te
   "total_price": "...",
   "partial_shipment": "...",
   "shipment_terms": "...",
-  "packaging": "...",
   "brand": "...",
   "payment_terms": "..."
 }}
