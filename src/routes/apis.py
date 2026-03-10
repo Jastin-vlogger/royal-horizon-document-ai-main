@@ -13,6 +13,7 @@ from src.core.document_processor import (
 )
 from src.core.lpo_invoice_business_logics import extract_lpo_invoice
 from src.core.performa_invoice_business_logics import extract_performa_invoice
+from src.core.shipment_calculations import calculate_shipment_logistics
 from src.schemas.response import (
     ExtractionMetadata,
     LPOInvoiceResult,
@@ -137,8 +138,18 @@ async def shipment_form(
             model=meta_list[0].model if meta_list else "",
         )
 
+    # Post-process: shipment logistics and price reconciliation
+    combined = {
+        "lpo_invoice": lpo_result.model_dump(exclude_none=False) if lpo_result else None,
+        "performa_invoice": performa_result.model_dump(exclude_none=False) if performa_result else None,
+        "metadata": aggregated.model_dump() if aggregated else None,
+    }
+    with_calcs = calculate_shipment_logistics(combined)
+    shipment_calculations = with_calcs.get("shipment_calculations")
+
     return ShipmentFormResponse(
         lpo_invoice=lpo_result,
         performa_invoice=performa_result,
         metadata=aggregated,
+        shipment_calculations=shipment_calculations,
     )

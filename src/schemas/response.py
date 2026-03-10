@@ -62,6 +62,10 @@ class ShipmentFormResponse(BaseModel):
         default=None, description="Performa invoice extraction result."
     )
     metadata: Optional[ExtractionMetadata] = Field(default=None, description="Aggregated usage/cost metadata.")
+    shipment_calculations: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Derived logistics and price reconciliation (fcl, bags, is_price_matching, etc.).",
+    )
 
     def to_combined_json(self) -> dict[str, Any]:
         """Return a clean combined JSON dict (no metadata if not needed in final contract)."""
@@ -76,4 +80,6 @@ class ShipmentFormResponse(BaseModel):
             out["performa_invoice"] = None
         if self.metadata is not None:
             out["metadata"] = self.metadata.model_dump()
+        if self.shipment_calculations is not None:
+            out["shipment_calculations"] = self.shipment_calculations
         return out
