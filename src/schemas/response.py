@@ -83,3 +83,10 @@ class ShipmentFormResponse(BaseModel):
         if self.shipment_calculations is not None:
             out["shipment_calculations"] = self.shipment_calculations
         return out
+
+
+class BillNoExtractionResponse(BaseModel):
+    """Response for purchase_tracker B/L number extraction."""
+
+    bill_no: Optional[str] = Field(default=None, description="Extracted Bill of Lading number, or null if not found.")
+    metadata: Optional[ExtractionMetadata] = Field(default=None, description="Usage and cost metadata from extraction.")

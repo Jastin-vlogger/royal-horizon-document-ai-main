@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from src.config.logger import get_logger
 from src.config.settings import get_settings
 from src.routes.apis import router as extraction_router
+from src.routes.purchase_tracker import router as purchase_tracker_router
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(extraction_router)
+    app.include_router(purchase_tracker_router)
     return app
 
 
