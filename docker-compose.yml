@@ -1,0 +1,13 @@
+services:
+  document-ai:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file: .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MODEL_TO_USE=${MODEL_TO_USE:-gpt-4o}
+      - TEMPERATURE=${TEMPERATURE:-0.0}
+      - MAX_TOKENS=${MAX_TOKENS:-4096}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
