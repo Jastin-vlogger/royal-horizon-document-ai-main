@@ -105,7 +105,9 @@ def _parse_quantity_mt(quantity_str: Optional[str]) -> Optional[float]:
 def _compute_price_reconciliation(
     lpo_invoice: Optional[dict],
     performa_invoice: Optional[dict],
-) -> tuple[Optional[bool], Optional[float], Optional[float], Optional[float], Optional[float]]:
+) -> tuple[
+    Optional[bool], Optional[float], Optional[float], Optional[float], Optional[float]
+]:
     """
     Compute is_price_matching, lpo_price_per_mt, pi_price_per_mt, mt_variation, diff_percent.
     Returns (None, None, None, None, None) when data is missing or unparseable.
@@ -166,22 +168,36 @@ def _compute_price_reconciliation(
             pi_price_per_mt,
             diff_percent,
         )
-    return is_price_matching, lpo_price_per_mt, pi_price_per_mt, mt_variation, diff_percent
+    return (
+        is_price_matching,
+        lpo_price_per_mt,
+        pi_price_per_mt,
+        mt_variation,
+        diff_percent,
+    )
 
 
 def calculate_shipment_logistics(parsed_response: dict[str, Any]) -> dict[str, Any]:
     """
     Compute shipment_calculations from parsed_response (lpo_invoice, performa_invoice, metadata).
-    Adds keys: fcl, bags, container_size, bags_per_container, pallets, is_price_matching, lpo_price_per_mt, pi_price_per_mt.
+    Adds keys: fcl, bags, container_size (from PI packaging), fcl_size (20ft/40ft), bags_per_container,
+    pallets, is_price_matching, lpo_price_per_mt, pi_price_per_mt.
     Returns the same dict with 'shipment_calculations' added/updated.
     """
     lpo = parsed_response.get("lpo_invoice")
     pi = parsed_response.get("performa_invoice")
 
+    # container_size: master bag weight in KG from PI packaging (e.g. 20, 40)
+    container_size: Optional[int] = None
+    if pi and isinstance(pi, dict) and pi.get("container_size") is not None:
+        try:
+            container_size = int(pi["container_size"])
+        except (TypeError, ValueError):
+            pass
+
     # Defaults for logistics (set to None when missing/unparseable)
     fcl: Optional[int] = None
     bags: Optional[int] = None
-    container_size: Optional[str] = None
     bags_per_container: Optional[int] = None
     pallets: Optional[int] = None
 
@@ -195,28 +211,33 @@ def calculate_shipment_logistics(parsed_response: dict[str, Any]) -> dict[str, A
         except ValueError:
             pass
 
-    if (
-        quantity_mt is not None
-        and quantity_mt > 0
-        and packing_kg is not None
-        and packing_kg > 0
-    ):
-        if quantity_mt <= CONTAINER_20FT_CAPACITY_MT:
-            container_size = "20ft"
+        if container_size is not None and str(container_size) == "20":
             container_capacity_mt = CONTAINER_20FT_CAPACITY_MT
-        else:
-            container_size = "40ft"
+
+        elif container_size is not None and str(container_size) == "40":
             container_capacity_mt = CONTAINER_40FT_CAPACITY_MT
+        else:
+            container_size = None
+            container_capacity_mt = None
+        if (
+            container_capacity_mt is not None
+            and quantity_mt is not None
+            and packing_kg is not None
+        ):
+            fcl = int(math.ceil(quantity_mt / container_capacity_mt))
+            container_capacity_kg = container_capacity_mt * 1000
+            bags_per_container = int(container_capacity_kg / packing_kg)
+            total_quantity_kg = quantity_mt * 1000
+            bags = int(total_quantity_kg / packing_kg)
+            pallets = int(math.ceil(bags / BAGS_PER_PALLET))
+        else:
+            fcl = None
+            bags_per_container = None
+            bags = None
+            pallets = None
 
-        fcl = int(math.ceil(quantity_mt / container_capacity_mt))
-        container_capacity_kg = container_capacity_mt * 1000
-        bags_per_container = int(container_capacity_kg / packing_kg)
-        total_quantity_kg = quantity_mt * 1000
-        bags = int(total_quantity_kg / packing_kg)
-        pallets = int(math.ceil(bags / BAGS_PER_PALLET))
-
-    is_price_matching, lpo_price_per_mt, pi_price_per_mt, mt_variation, diff_percent = _compute_price_reconciliation(
-        lpo, pi
+    is_price_matching, lpo_price_per_mt, pi_price_per_mt, mt_variation, diff_percent = (
+        _compute_price_reconciliation(lpo, pi)
     )
 
     shipment_calculations: dict[str, Any] = {

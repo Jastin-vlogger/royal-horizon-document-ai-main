@@ -52,6 +52,7 @@ class PerformaInvoiceResult(BaseModel):
     shipment_terms: Optional[str] = None
     brand: Optional[str] = None
     payment_terms: Optional[str] = None
+    container_size: Optional[int] = None
 
 
 class ShipmentFormResponse(BaseModel):

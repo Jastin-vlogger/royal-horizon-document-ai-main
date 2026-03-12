@@ -43,8 +43,8 @@ The table has these columns (left to right):
    - Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → commodity = "Rice"
    - Example: "Cooking Oil - Sunflower 5L" → commodity = "Cooking Oil"
 
-6. **item**: "Description" column. FULL description EXCLUDING the commodity prefix (remove commodity and the first " - ").
-   - Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → item = "Goldasteh Long Grain Sella Rice 1718 - 10 Kg"
+6. **item**: "Description" column. FULL description INCLUDING the commodity prefix (the complete value as printed).
+   - Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → item = "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg"
 
 7. **quantity**: "QTY" column. Numeric value exactly as shown (preserve commas if present).
 
@@ -52,7 +52,9 @@ The table has these columns (left to right):
 
 9. **price**: "Total Price" column. Numeric value exactly as shown.
 
-10. **packaging**: From the "Description" column. Extract ONLY the measurable terms related to packaging size/weight (e.g., "10KG", "15KG", "20KG", "40kg", "5L"). Do NOT extract the entire text. For example, if it says "20KG POUCH BAG WITH TRANSPARENT PP OUTER", extract exactly "20KG".
+10. **packaging**: Prefer the "UOM" column when present. Normalize to format like 1X10KG, 4X10KG (uppercase, X between numbers).
+   - From UOM column: "BAG/1x10kg" → "1X10KG"; "4*10 kg" → "4X10KG".
+   - From Description if UOM absent: extract measurable terms and normalize (e.g., "10kg" → "10KG", "1x10kg" → "1X10KG").
 
 ---
 

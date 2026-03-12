@@ -49,8 +49,12 @@ def _parse_list_form(value: Optional[str]) -> List[str]:
     summary="Extract key-value data from Performa Invoice and LPO documents",
 )
 async def shipment_form(
-    performa_invoice: Optional[UploadFile] = File(None, description="Performa Invoice (PDF or image)"),
-    lpo_invoice: Optional[UploadFile] = File(None, description="LPO Invoice (PDF or image)"),
+    performa_invoice: Optional[UploadFile] = File(
+        None, description="Performa Invoice (PDF or image)"
+    ),
+    lpo_invoice: Optional[UploadFile] = File(
+        None, description="LPO Invoice (PDF or image)"
+    ),
     inco_terms_list: Optional[str] = Form(
         None,
         description='JSON array of allowed INCO terms, e.g. ["CIF","FOB","EXWORKS"]',
@@ -68,7 +72,7 @@ async def shipment_form(
     logger.debug("Processing Shipment Form API")
     inco_list = _parse_list_form(inco_terms_list)
     if not inco_list:
-        inco_list = ["CIF", "FOB", "EXWORKS"]
+        inco_list = ["CIF", "FOB", "EXWORKS", "C&F"]
     supplier_list = _parse_list_form(suppliers)
 
     lpo_result: Optional[LPOInvoiceResult] = None
@@ -87,14 +91,18 @@ async def shipment_form(
             image_bytes = load_image_bytes(content, filename)
         except Exception as e:
             logger.warning(f"LPO image load failed: {e}")
-            raise HTTPException(status_code=400, detail=f"Could not process LPO file: {e}") from e
+            raise HTTPException(
+                status_code=400, detail=f"Could not process LPO file: {e}"
+            ) from e
         try:
             lpo_result, lpo_meta = await extract_lpo_invoice(image_bytes)
             if lpo_meta:
                 meta_list.append(lpo_meta)
         except Exception as e:
             logger.exception("LPO extraction failed")
-            raise HTTPException(status_code=500, detail=f"LPO extraction failed: {e}") from e
+            raise HTTPException(
+                status_code=500, detail=f"LPO extraction failed: {e}"
+            ) from e
 
     if performa_invoice and performa_invoice.filename:
         content, filename = read_upload_to_bytes(performa_invoice)
@@ -108,7 +116,9 @@ async def shipment_form(
             image_bytes = load_image_bytes(content, filename)
         except Exception as e:
             logger.warning(f"Performa image load failed: {e}")
-            raise HTTPException(status_code=400, detail=f"Could not process Performa file: {e}") from e
+            raise HTTPException(
+                status_code=400, detail=f"Could not process Performa file: {e}"
+            ) from e
         try:
             performa_result, perf_meta = await extract_performa_invoice(
                 image_bytes, inco_terms_list=inco_list, suppliers=supplier_list
@@ -117,9 +127,13 @@ async def shipment_form(
                 meta_list.append(perf_meta)
         except Exception as e:
             logger.exception("Performa extraction failed")
-            raise HTTPException(status_code=500, detail=f"Performa extraction failed: {e}") from e
+            raise HTTPException(
+                status_code=500, detail=f"Performa extraction failed: {e}"
+            ) from e
 
-    if not (lpo_invoice and lpo_invoice.filename) and not (performa_invoice and performa_invoice.filename):
+    if not (lpo_invoice and lpo_invoice.filename) and not (
+        performa_invoice and performa_invoice.filename
+    ):
         raise HTTPException(
             status_code=400,
             detail="At least one file must be provided: performa_invoice or lpo_invoice",
@@ -140,12 +154,17 @@ async def shipment_form(
 
     # Post-process: shipment logistics and price reconciliation
     combined = {
-        "lpo_invoice": lpo_result.model_dump(exclude_none=False) if lpo_result else None,
-        "performa_invoice": performa_result.model_dump(exclude_none=False) if performa_result else None,
+        "lpo_invoice": lpo_result.model_dump(exclude_none=False)
+        if lpo_result
+        else None,
+        "performa_invoice": performa_result.model_dump(exclude_none=False)
+        if performa_result
+        else None,
         "metadata": aggregated.model_dump() if aggregated else None,
     }
     with_calcs = calculate_shipment_logistics(combined)
     shipment_calculations = with_calcs.get("shipment_calculations")
+    logger.debug(f"Shipment Calculations: {shipment_calculations}")
 
     return ShipmentFormResponse(
         lpo_invoice=lpo_result,

@@ -11,7 +11,11 @@ def get_performa_invoice_system_prompt(
     Build the system prompt for Performa Invoice extraction.
     Injects allowed inco_terms and suppliers for validation/matching.
     """
-    inco_terms_str = ", ".join(f'"{t}"' for t in inco_terms_list) if inco_terms_list else "CIF, FOB, EXW, etc."
+    inco_terms_str = (
+        ", ".join(f'"{t}"' for t in inco_terms_list)
+        if inco_terms_list
+        else "CIF, FOB, EXW, C&F, etc."
+    )
     suppliers_str = ", ".join(f'"{s}"' for s in suppliers) if suppliers else "(any)"
 
     return f"""
@@ -26,7 +30,7 @@ These documents come from DIFFERENT suppliers and have NO fixed layout or consis
 - **Allowed supplier_details** (must be one of): {suppliers_str}
 - **Allowed inco_terms** (must be one of): {inco_terms_str}
 
-If the document value does not exactly match one of the above, pick the closest match from the list, or return the document value if it is clearly the same concept (e.g. "C&F" → use "CIF" if in list). Otherwise return null.
+If the document value does not exactly match one of the above, pick the closest match from the list. For inco_terms: if the document shows "C&F", "C & F", or "C AND F" (with or without spaces), return "C&F". Otherwise return null if no match.
 
 ---
 
@@ -104,6 +108,10 @@ Extract the following fields by MEANING, not by exact label name. Use semantic u
 - **What to find**: How and when payment is to be made.
 - **Rule**: Extract the full payment term text.
 
+### 14. `container_size`
+- **What to find**: The master/outer bag weight in KG (numeric only).
+- **Rule**: From the key `PACKING` text in the document, extract the weight of the outermost/master bag. Prefer "XKG MASTER", "XKG POUCH", or the largest bag weight when multiple (e.g., inner 10kg bags in 40kg master → 40). Examples: "20KG POUCH BAG..." → 20; "4*10 kg ... IN 40KG MASTER PP BAGS" → 40. Return the numeric value only (20, 40, etc.). If not determinable, return null. If not present, return null.
+
 ---
 
 ## CRITICAL RULES
@@ -131,6 +139,7 @@ Return ONLY a valid JSON object. No explanation, no markdown fences, no extra te
   "partial_shipment": "...",
   "shipment_terms": "...",
   "brand": "...",
-  "payment_terms": "..."
+  "payment_terms": "...",
+  "container_size": "...", // 20, 40, etc.
 }}
 """.strip()
