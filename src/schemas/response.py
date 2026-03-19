@@ -1,8 +1,8 @@
 """Response schemas for the document extraction API."""
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 
 class ExtractionMetadata(BaseModel):
@@ -86,8 +86,109 @@ class ShipmentFormResponse(BaseModel):
         return out
 
 
-class BillNoExtractionResponse(BaseModel):
-    """Response for purchase_tracker B/L number extraction."""
+class BillOfLadingContainerRow(BaseModel):
+    """One row from the container annexure (Page 2)."""
 
-    bill_no: Optional[str] = Field(default=None, description="Extracted Bill of Lading number, or null if not found.")
-    metadata: Optional[ExtractionMetadata] = Field(default=None, description="Usage and cost metadata from extraction.")
+    model_config = ConfigDict(extra="ignore")
+
+    container_no: str = Field(..., description="Container ID as printed (e.g. FCIU2664293).")
+    pkg_ct: int = Field(..., description="Package count from the Pkg Cnt column for this row.")
+
+    @field_validator("container_no", mode="before")
+    @classmethod
+    def _strip_container_no(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class BillOfLadingStructuredExtraction(BaseModel):
+    """
+    Structured B/L and shipment fields aligned with the bill extraction notebook schema.
+    Nullable fields mirror explicit nulls from the model when data is missing.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    bl_number: Optional[str] = Field(default=None, description="B/L NUMBER / B/L No.")
+    shipped_on_board_date: Optional[str] = Field(
+        default=None, description="ISO 8601 date YYYY-MM-DD when cargo shipped on board."
+    )
+    port_of_loading: Optional[str] = None
+    port_of_discharge: Optional[str] = None
+    number_of_containers: Optional[int] = None
+    number_of_bags: Optional[int] = None
+    quantity_mt: Optional[float] = Field(default=None, description="Total quantity in metric tons.")
+    shipping_line: Optional[str] = None
+    free_detention_days: Optional[int] = None
+    maximum_detention_days: Optional[int] = None
+    freight_prepaid: Optional[bool] = None
+    vessel_name: Optional[str] = None
+    invoice_number: Optional[str] = None
+    containers: list[BillOfLadingContainerRow] = Field(
+        default_factory=list,
+        description="Annexure rows; empty if Page 2 was not provided or has no table.",
+    )
+    checksum_warning: Optional[bool] = Field(
+        default=None,
+        description="True when pkg_ct sum could not be reconciled with number_of_bags.",
+    )
+
+    @field_validator("containers", mode="before")
+    @classmethod
+    def _containers_none_to_empty(cls, v: Any) -> Any:
+        if v is None:
+            return []
+        return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _trim_top_level_strings(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        skip = {"containers", "freight_prepaid", "checksum_warning"}
+        for key, val in list(out.items()):
+            if key in skip or not isinstance(val, str):
+                continue
+            s = val.strip()
+            out[key] = s if s else None
+        return out
+
+
+class BillNoExtractionResponse(BaseModel):
+    """
+    Flat JSON shape for POST /purchase-tracker/bill-no: extraction fields and metadata
+    at the top level (no nested `extraction` object).
+    """
+
+    bill_no: Optional[str] = Field(default=None, description="B/L number (from model bl_number / bill_no).")
+    shipped_on_board_date: Optional[str] = Field(default=None, description="ISO date YYYY-MM-DD.")
+    port_of_loading: Optional[str] = None
+    port_of_discharge: Optional[str] = None
+    number_of_containers: Optional[int] = None
+    number_of_bags: Optional[int] = None
+    quantity_mt: Optional[float] = Field(default=None, description="Quantity in metric tons.")
+    shipping_line: Optional[str] = None
+    free_detention_days: Optional[int] = None
+    maximum_detention_days: Optional[int] = None
+    freight_prepaid: Optional[bool] = None
+    vessel_name: Optional[str] = None
+    invoice_number: Optional[str] = None
+    containers: list[BillOfLadingContainerRow] = Field(
+        default_factory=list,
+        description="Container annexure rows; empty list if none.",
+    )
+    metadata: Optional[ExtractionMetadata] = Field(
+        default=None,
+        description="Token usage, cost, latency from the LLM call.",
+    )
+
+    @field_serializer("quantity_mt", when_used="json")
+    def _quantity_mt_json(self, value: Optional[float]) -> Optional[Union[int, float]]:
+        if value is None:
+            return None
+        f = float(value)
+        if f.is_integer():
+            return int(f)
+        return f

@@ -23,6 +23,19 @@ def _build_image_message(image_bytes: bytes, user_text: str = "Extract the requi
     return HumanMessage(content=content)
 
 
+def _build_multi_image_message(
+    image_bytes_list: list[bytes],
+    user_text: str,
+) -> HumanMessage:
+    """Build a HumanMessage with multiple PNG images (base64) and leading text."""
+    content: list = [{"type": "text", "text": user_text}]
+    for chunk in image_bytes_list:
+        b64 = base64.standard_b64encode(chunk).decode("utf-8")
+        image_url = f"data:image/png;base64,{b64}"
+        content.append({"type": "image_url", "image_url": {"url": image_url}})
+    return HumanMessage(content=content)
+
+
 def _usage_from_response_metadata(meta: Optional[Dict[str, Any]]) -> tuple[int, int, int]:
     """Extract input_tokens, output_tokens, total_tokens from response_metadata."""
     if not meta:
@@ -63,6 +76,53 @@ async def invoke_vision_extraction(
     messages = [
         SystemMessage(content=system_prompt),
         _build_image_message(image_bytes, user_text),
+    ]
+
+    start = time.perf_counter()
+    response = await llm.ainvoke(messages)
+    latency_ms = (time.perf_counter() - start) * 1000.0
+
+    content = response.content if hasattr(response, "content") else str(response)
+    if not isinstance(content, str):
+        content = str(content)
+    
+    logger.debug(f"LLM Response:\n {content}")
+
+    meta = getattr(response, "response_metadata", None) or {}
+    input_tokens, output_tokens, total_tokens = _usage_from_response_metadata(meta)
+    cost_usd = calculate_cost(model, input_tokens, output_tokens)
+
+    extraction_meta = ExtractionMetadata(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        cost_incurred=cost_usd,
+        cost_currency="USD",
+        latency_ms=round(latency_ms, 2),
+        model=model,
+    )
+    return content, extraction_meta
+
+
+async def invoke_multi_image_vision_extraction(
+    system_prompt: str,
+    image_bytes_list: list[bytes],
+    user_text: str = "Extract the required fields and return only valid JSON.",
+) -> tuple[str, ExtractionMetadata]:
+    """
+    Vision extraction with one HumanMessage containing multiple images.
+    Same metadata/cost behavior as invoke_vision_extraction.
+    """
+    if not image_bytes_list:
+        raise ValueError("At least one image is required")
+
+    llm = get_llm()
+    s = get_settings()
+    model = s.model_to_use
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        _build_multi_image_message(image_bytes_list, user_text),
     ]
 
     start = time.perf_counter()

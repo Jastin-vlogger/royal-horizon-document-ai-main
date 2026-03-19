@@ -41,6 +41,15 @@ def detect_file_type(filename: str) -> str:
     return "unknown"
 
 
+def _pil_page_to_png_bytes(pil_img: Image.Image) -> bytes:
+    """Convert a PIL page to PNG bytes (RGB)."""
+    if pil_img.mode in ("RGBA", "P"):
+        pil_img = pil_img.convert("RGB")
+    buf = io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def pdf_first_page_to_image(pdf_bytes: bytes) -> bytes:
     """
     Convert the first page of a PDF to PNG image bytes.
@@ -50,12 +59,43 @@ def pdf_first_page_to_image(pdf_bytes: bytes) -> bytes:
     pages = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=150)
     if not pages:
         raise ValueError("PDF has no pages")
-    pil_img = pages[0]
+    return _pil_page_to_png_bytes(pages[0])
+
+
+def pdf_pages_to_png_images(
+    pdf_bytes: bytes,
+    first_page: int = 1,
+    last_page: int = 2,
+) -> list[bytes]:
+    """
+    Convert a range of PDF pages (inclusive) to PNG image bytes each.
+    pdf2image returns only existing pages; a single-page PDF yields one image.
+    :param pdf_bytes: Raw PDF file content.
+    :param first_page: 1-based first page index.
+    :param last_page: 1-based last page index (inclusive).
+    :return: Non-empty list of PNG byte strings, one per rendered page.
+    """
+    pages = convert_from_bytes(
+        pdf_bytes, first_page=first_page, last_page=last_page, dpi=150
+    )
+    if not pages:
+        raise ValueError("PDF has no readable pages")
+    return [_pil_page_to_png_bytes(p) for p in pages]
+
+
+def load_bill_document_pages(content: bytes, filename: str) -> list[bytes]:
+    """
+    Load up to two pages for B/L extraction: PDF → pages 1–2 as PNGs; image → one PNG.
+    Raises ValueError on empty/unreadable PDF pages. Raises PIL errors on corrupt images.
+    """
+    if is_pdf(filename):
+        return pdf_pages_to_png_images(content, first_page=1, last_page=2)
+    pil_img = Image.open(io.BytesIO(content))
     if pil_img.mode in ("RGBA", "P"):
         pil_img = pil_img.convert("RGB")
     buf = io.BytesIO()
     pil_img.save(buf, format="PNG")
-    return buf.getvalue()
+    return [buf.getvalue()]
 
 
 def load_image_bytes(content: bytes, filename: str) -> bytes:

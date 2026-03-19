@@ -1,14 +1,19 @@
-"""Purchase tracker APIs: B/L number and future extraction endpoints."""
+"""Purchase tracker APIs: B/L number and structured bill extraction."""
+
+from PIL import UnidentifiedImageError
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from src.config.logger import logger
 from src.core.document_processor import (
     detect_file_type,
-    load_image_bytes,
+    load_bill_document_pages,
     read_upload_to_bytes,
 )
-from src.core.purchase_tracker_bill_no import extract_bill_no
+from src.core.purchase_tracker_bill_no import (
+    build_bill_no_api_response,
+    extract_bill_structured,
+)
 from src.schemas.response import BillNoExtractionResponse
 
 router = APIRouter(prefix="/purchase-tracker", tags=["purchase-tracker"])
@@ -17,17 +22,21 @@ ALLOWED_TYPES = {"pdf", "image"}
 
 
 @router.post(
-    "/bill-no",
+    "/fetch-details",
     response_model=BillNoExtractionResponse,
-    summary="Extract Bill of Lading number from shipping document",
+    summary="Extract structured Bill of Loading data from shipping document",
 )
 async def extract_bill_no_from_document(
-    file: UploadFile = File(..., description="Shipping document (image or single-page PDF)"),
+    file: UploadFile = File(
+        ...,
+        description="Shipping document: PDF (pages 1–2 used) or image (PNG/JPEG).",
+    ),
 ) -> BillNoExtractionResponse:
     """
-    Accepts one file (image or single-page PDF) of a purchase/shipping bill.
-    Extracts the Bill of Lading number (B/L NUMBER) and returns it with usage metadata.
-    Returns bill_no as null if not found.
+    Accepts PDF or image. Multi-page PDFs: only page 1 and page 2 are sent to the model.
+
+    Returns a flat JSON object: all extracted fields plus `metadata` (tokens, cost, latency).
+    If the model output cannot be parsed or validated, scalar fields are null and `containers` is [].
     """
     logger.debug("Processing Purchase Tracker bill-no API")
     if not file or not file.filename:
@@ -40,13 +49,40 @@ async def extract_bill_no_from_document(
             detail=f"File must be PDF or image (jpg, jpeg, png). Got: {filename}",
         )
     try:
-        image_bytes = load_image_bytes(content, filename)
+        page_images = load_bill_document_pages(content, filename)
+    except ValueError as e:
+        logger.warning("Bill document pages unavailable: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not read document pages: {e}",
+        ) from e
+    except UnidentifiedImageError as e:
+        logger.warning("Bill document image unreadable: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail="Could not decode image file. Use a valid JPEG or PNG.",
+        ) from e
     except Exception as e:
         logger.warning("Bill-no document load failed: %s", e)
-        raise HTTPException(status_code=400, detail=f"Could not process file: {e}") from e
+        raise HTTPException(
+            status_code=400, detail=f"Could not process file: {e}"
+        ) from e
+
+    if not page_images:
+        raise HTTPException(
+            status_code=400, detail="No readable pages found in the document."
+        )
+
     try:
-        bill_no, metadata = await extract_bill_no(image_bytes)
+        extraction, metadata, parse_error = await extract_bill_structured(page_images)
+        logger.debug(f"Extracted Details: {extraction}")
     except Exception as e:
-        logger.exception("B/L extraction failed")
+        logger.exception("B/L structured extraction failed")
         raise HTTPException(status_code=500, detail=f"Extraction failed: {e}") from e
-    return BillNoExtractionResponse(bill_no=bill_no, metadata=metadata)
+
+    if parse_error:
+        logger.warning(
+            "Bill-no parse/validation failed (returning null fields): %s", parse_error
+        )
+
+    return build_bill_no_api_response(extraction, metadata)

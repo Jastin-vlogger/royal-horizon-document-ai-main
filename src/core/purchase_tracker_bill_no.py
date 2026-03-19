@@ -1,56 +1,109 @@
-"""Business logic for purchase_tracker B/L number extraction: prompt + LLM + parse."""
+"""Purchase tracker: structured B/L extraction via vision LLM + Pydantic validation."""
 
-import json
-import re
-from typing import Optional, Tuple
+from typing import Any, Optional
+
+from pydantic import ValidationError
 
 from src.config.logger import logger
-from src.core.llm import invoke_vision_extraction
+from src.core.llm import invoke_multi_image_vision_extraction
 from src.prompts.purchase_tracker_bill_no import (
-    get_bill_no_system_prompt,
-    get_bill_no_user_prompt,
+    get_bill_structured_system_prompt,
+    get_bill_structured_user_prompt,
 )
-from src.schemas.response import ExtractionMetadata
+from src.schemas.response import (
+    BillNoExtractionResponse,
+    BillOfLadingStructuredExtraction,
+    ExtractionMetadata,
+)
+from src.utils.utils import parse_json_from_content
 
 
-def _parse_json_from_content(content: str) -> Optional[dict]:
-    """Extract JSON object from model output (may be wrapped in markdown)."""
-    if not content or not content.strip():
-        return None
-    text = content.strip()
-    if "```json" in text:
-        text = re.sub(r"^.*?```json\s*", "", text, flags=re.DOTALL)
-    if "```" in text:
-        text = re.sub(r"```\s*.*$", "", text, flags=re.DOTALL)
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return None
+def _coerce_legacy_bill_no_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Map legacy bill_no into bl_number when bl_number is absent or empty."""
+    out = dict(data)
+    bl = out.get("bl_number")
+    legacy = out.get("bill_no")
+    bl_empty = bl is None or (isinstance(bl, str) and not bl.strip())
+    if bl_empty and legacy is not None:
+        if isinstance(legacy, str):
+            out["bl_number"] = legacy.strip() or None
+        else:
+            out["bl_number"] = str(legacy).strip() or None
+    return out
 
 
-async def extract_bill_no(image_bytes: bytes) -> Tuple[Optional[str], Optional[ExtractionMetadata]]:
+def _validation_error_summary(exc: ValidationError) -> str:
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(x) for x in err.get("loc", ()))
+        parts.append(f"{loc}: {err.get('msg', 'validation error')}")
+    return "; ".join(parts) if parts else "Schema validation failed."
+
+
+def build_bill_no_api_response(
+    extraction: Optional[BillOfLadingStructuredExtraction],
+    metadata: ExtractionMetadata,
+) -> BillNoExtractionResponse:
+    """Map validated LLM payload to the flat /bill-no response shape."""
+    if extraction is None:
+        return BillNoExtractionResponse(containers=[], metadata=metadata)
+    return BillNoExtractionResponse(
+        bill_no=extraction.bl_number,
+        shipped_on_board_date=extraction.shipped_on_board_date,
+        port_of_loading=extraction.port_of_loading,
+        port_of_discharge=extraction.port_of_discharge,
+        number_of_containers=extraction.number_of_containers,
+        number_of_bags=extraction.number_of_bags,
+        quantity_mt=extraction.quantity_mt,
+        shipping_line=extraction.shipping_line,
+        free_detention_days=extraction.free_detention_days,
+        maximum_detention_days=extraction.maximum_detention_days,
+        freight_prepaid=extraction.freight_prepaid,
+        vessel_name=extraction.vessel_name,
+        invoice_number=extraction.invoice_number,
+        containers=list(extraction.containers),
+        metadata=metadata,
+    )
+
+
+async def extract_bill_structured(
+    page_png_bytes: list[bytes],
+) -> tuple[
+    Optional[BillOfLadingStructuredExtraction], ExtractionMetadata, Optional[str]
+]:
     """
-    Extract the Bill of Lading number from the given document image bytes.
-    Returns (bill_no string or None, metadata). bill_no is None if not found or parsing failed.
+    Run vision extraction on one or two page images (PNG), validate with Pydantic.
+
+    Returns (extraction_or_none, metadata, parse_error_or_none).
     """
-    logger.debug("Extracting B/L number from purchase/shipping document")
-    system_prompt = get_bill_no_system_prompt()
-    user_prompt = get_bill_no_user_prompt()
-    content, metadata = await invoke_vision_extraction(
+    if not page_png_bytes:
+        raise ValueError("At least one page image is required")
+
+    logger.debug(
+        f"Structured B/L extraction: {len(page_png_bytes)} page image(s), {sum(len(b) for b in page_png_bytes)} total bytes",
+    )
+    system_prompt = get_bill_structured_system_prompt()
+    user_prompt = get_bill_structured_user_prompt(len(page_png_bytes))
+
+    content, metadata = await invoke_multi_image_vision_extraction(
         system_prompt=system_prompt,
-        image_bytes=image_bytes,
+        image_bytes_list=page_png_bytes,
         user_text=user_prompt,
     )
-    logger.debug("B/L extraction raw content: %s", content[:200] if content else "")
-    data = _parse_json_from_content(content)
+
+    data = parse_json_from_content(content)
     if data is None:
-        logger.warning("B/L extraction parse failed, returning bill_no=None")
-        return None, metadata
-    bill_no = data.get("bill_no")
-    if bill_no is not None and not isinstance(bill_no, str):
-        bill_no = str(bill_no).strip() or None
-    elif bill_no is not None:
-        bill_no = bill_no.strip() or None
-    logger.debug("B/L extraction result bill_no=%s", bill_no)
-    return bill_no, metadata
+        logger.warning("Structured B/L: JSON parse failed")
+        return None, metadata, "Model output was empty or not valid JSON."
+
+    payload = _coerce_legacy_bill_no_fields(data)
+    try:
+        extraction = BillOfLadingStructuredExtraction.model_validate(payload)
+    except ValidationError as e:
+        msg = _validation_error_summary(e)
+        logger.warning(f"Structured B/L: Pydantic validation failed: {msg}")
+        return None, metadata, msg
+
+    return extraction, metadata, None
+
+

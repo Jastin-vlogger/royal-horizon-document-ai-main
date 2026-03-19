@@ -212,3 +212,4 @@ poetry.lock
 .mypy_cache/
 prompts.py
 .cursor
+experiments
