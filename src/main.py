@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from src.config.logger import get_logger
 from src.config.settings import get_settings
 from src.routes.apis import router as extraction_router
+from src.routes.costsheet import router as costsheet_router
 from src.routes.purchase_tracker import router as purchase_tracker_router
 
 
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(extraction_router)
+    app.include_router(costsheet_router)
     app.include_router(purchase_tracker_router)
     return app
 
@@ -38,6 +40,7 @@ app = create_app()
 def run() -> None:
     """Entry point for `poetry run start`: run uvicorn server."""
     import uvicorn
+
     s = get_settings()
     uvicorn.run(
         "src.main:app",
@@ -45,3 +48,7 @@ def run() -> None:
         port=s.port,
         reload=False,
     )
+
+
+if __name__ == "__main__":
+    run()
