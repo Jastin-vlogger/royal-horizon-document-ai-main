@@ -4,7 +4,7 @@ Production-ready AI microservice for **key-value extraction** from business docu
 
 ## Features
 
-- **Dual document types**: Performa Invoice and LPO (Foreign Purchase Order) in a single API
+- **Shipment bundle**: LPO, Performa Invoice, and Rice Quality Report in one classified + extracted flow
 - **Formats**: PDF (first page only) and images (jpg, jpeg, png)
 - **Vision model**: GPT-4o (configurable) via LangChain + OpenAI
 - **Structured JSON** output with optional usage metadata (tokens, cost, latency)
@@ -33,14 +33,17 @@ Server runs at `http://0.0.0.0:8000` (configurable via `PORT` / `HOST`).
 ### `POST /shipment-form`
 
 - **Content-Type**: `multipart/form-data`
-- **Files** (optional but at least one required):
+- **Files** (all required):
+  - `lpo_invoice`: LPO (PDF or image)
   - `performa_invoice`: Performa Invoice (PDF or image)
-  - `lpo_invoice`: LPO document (PDF or image)
+  - `rice_quality_report`: Rice Quality Report (PDF or image)
 - **Form fields** (optional):
   - `inco_terms_list`: JSON array, e.g. `["CIF","FOB","EXWORKS"]`
   - `suppliers`: JSON array, e.g. `["LEKH RAJ","M RAHEEM RICE PROCESSING MILLS"]`
 
-**Response**: Combined JSON with `lpo_invoice`, `performa_invoice`, and `metadata` (tokens, cost, latency).
+**Flow**: A classification pass runs on all three pages (PDFs: first page only). If `is_valid_document` is false, the API returns **422** with a structured `detail` object (`error`, `reason`, flags, and `classified_data`). On success, LPO, Performa, and Rice Quality extractions run in parallel.
+
+**Response**: `lpo_invoice`, `performa_invoice`, `shipment_calculations`, `classified_data` (full classifier JSON), `s1_quality_report` (full rice-quality JSON), and cumulative `metadata` (tokens, cost, latency summed across all LLM calls).
 
 ## Configuration (.env)
 

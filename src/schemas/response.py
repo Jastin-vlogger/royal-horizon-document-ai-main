@@ -55,8 +55,20 @@ class PerformaInvoiceResult(BaseModel):
     container_size: Optional[int] = None
 
 
+class ShipmentClassificationResult(BaseModel):
+    """LLM output from shipment document classification (extra keys preserved)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    is_valid_document: bool = False
+    has_lpo: bool = False
+    has_performa_invoice: bool = False
+    has_ricequality_doc: bool = False
+    reason: str = ""
+
+
 class ShipmentFormResponse(BaseModel):
-    """Combined response from /shipment-form with both documents and metadata."""
+    """Combined response from /shipment-form: LPO, Performa, calculations, classification, rice report, metadata."""
 
     lpo_invoice: Optional[LPOInvoiceResult] = Field(default=None, description="LPO extraction result.")
     performa_invoice: Optional[PerformaInvoiceResult] = Field(
@@ -66,6 +78,14 @@ class ShipmentFormResponse(BaseModel):
     shipment_calculations: Optional[dict[str, Any]] = Field(
         default=None,
         description="Derived logistics and price reconciliation (fcl, bags, is_price_matching, etc.).",
+    )
+    classified_data: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Full JSON from shipment document classification LLM call.",
+    )
+    s1_quality_report: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Full JSON from Rice Quality Report extraction LLM call.",
     )
 
     def to_combined_json(self) -> dict[str, Any]:
@@ -83,6 +103,10 @@ class ShipmentFormResponse(BaseModel):
             out["metadata"] = self.metadata.model_dump()
         if self.shipment_calculations is not None:
             out["shipment_calculations"] = self.shipment_calculations
+        if self.classified_data is not None:
+            out["classified_data"] = self.classified_data
+        if self.s1_quality_report is not None:
+            out["s1_quality_report"] = self.s1_quality_report
         return out
 
 

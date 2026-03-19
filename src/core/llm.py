@@ -12,7 +12,10 @@ from src.schemas.response import ExtractionMetadata
 from src.utils.cost_calculator import calculate_cost
 
 
-def _build_image_message(image_bytes: bytes, user_text: str = "Extract the required fields and return only valid JSON.") -> HumanMessage:
+def _build_image_message(
+    image_bytes: bytes,
+    user_text: str = "Extract the required fields and return only valid JSON.",
+) -> HumanMessage:
     """Build a HumanMessage with image (base64) and optional text."""
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     image_url = f"data:image/png;base64,{b64}"
@@ -36,7 +39,9 @@ def _build_multi_image_message(
     return HumanMessage(content=content)
 
 
-def _usage_from_response_metadata(meta: Optional[Dict[str, Any]]) -> tuple[int, int, int]:
+def _usage_from_response_metadata(
+    meta: Optional[Dict[str, Any]],
+) -> tuple[int, int, int]:
     """Extract input_tokens, output_tokens, total_tokens from response_metadata."""
     if not meta:
         return 0, 0, 0
@@ -85,8 +90,6 @@ async def invoke_vision_extraction(
     content = response.content if hasattr(response, "content") else str(response)
     if not isinstance(content, str):
         content = str(content)
-    
-    logger.debug(f"LLM Response:\n {content}")
 
     meta = getattr(response, "response_metadata", None) or {}
     input_tokens, output_tokens, total_tokens = _usage_from_response_metadata(meta)
