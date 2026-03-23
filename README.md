@@ -45,6 +45,34 @@ Server runs at `http://0.0.0.0:8000` (configurable via `PORT` / `HOST`).
 
 **Response**: `lpo_invoice`, `performa_invoice`, `shipment_calculations`, `classified_data` (full classifier JSON), `s1_quality_report` (full rice-quality JSON), and cumulative `metadata` (tokens, cost, latency summed across all LLM calls).
 
+### `POST /arrival-notice/extract`
+
+- **Content-Type**: `multipart/form-data`
+- **File** (required):
+  - `file`: Arrival notice or related shipping document — **PDF** (all pages are rasterized and sent to the model) or **image** (`jpg`, `jpeg`, `png`).
+
+**Flow**: Each PDF page becomes a PNG at 150 DPI; images are normalized to PNG. A single vision call sends all page images with the system prompt from `src/prompts/arrival_notice.py` (`arrival_notice_system_prompt`). The model must return JSON with exactly `arrival_on` and `free_retension_days`; the service validates strictly (ISO date `YYYY-MM-DD` or null; free time as `"N days"` or null).
+
+**Response** example shape:
+
+```json
+{
+  "arrival_on": "2026-03-03",
+  "free_retension_days": "14 days",
+  "metadata": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_incurred": 0.0,
+    "cost_currency": "USD",
+    "latency_ms": 0.0,
+    "model": "gpt-4o"
+  }
+}
+```
+
+**Errors**: `400` for missing/invalid file type or unreadable PDF/image; `502` if the model output is not valid JSON or fails Pydantic validation; `500` for unexpected server errors. If `arrival_notice_system_prompt` is left empty after stripping whitespace, the handler returns `503` with a configuration message.
+
 ## Configuration (.env)
 
 | Variable        | Description           | Default  |
