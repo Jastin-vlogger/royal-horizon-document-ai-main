@@ -4,7 +4,6 @@ from src.schemas.request import ShipmentFormRequest
 from src.schemas.response import (
     ExtractionMetadata,
     LPOInvoiceResult,
-    PerformaInvoiceResult,
     ShipmentClassificationResult,
     ShipmentFormResponse,
 )
@@ -14,6 +13,5 @@ __all__ = [
     "ShipmentFormResponse",
     "ShipmentClassificationResult",
     "LPOInvoiceResult",
-    "PerformaInvoiceResult",
     "ExtractionMetadata",
 ]

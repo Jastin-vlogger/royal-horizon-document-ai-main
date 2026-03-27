@@ -13,7 +13,6 @@ from src.core.document_processor import (
     read_upload_to_bytes,
 )
 from src.core.lpo_invoice_business_logics import extract_lpo_invoice
-from src.core.performa_invoice_business_logics import extract_performa_invoice
 from src.core.rice_quality_report_business_logics import extract_rice_quality_report
 from src.core.shipment_calculations import calculate_shipment_logistics
 from src.core.shipment_document_classification import classify_shipment_documents
@@ -75,12 +74,9 @@ def _aggregate_metadata(meta_list: List[ExtractionMetadata]) -> Optional[Extract
 @router.post(
     "/shipment-form",
     response_model=ShipmentFormResponse,
-    summary="Classify LPO, Performa Invoice, and Rice Quality Report; then extract all three",
+    summary="Classify and extract LPO and Rice Quality Report",
 )
 async def shipment_form(
-    performa_invoice: Optional[UploadFile] = File(
-        None, description="Performa Invoice (PDF or image)"
-    ),
     lpo_invoice: Optional[UploadFile] = File(
         None, description="LPO Invoice (PDF or image)"
     ),
@@ -97,10 +93,13 @@ async def shipment_form(
     ),
 ):
     """
-    Requires three uploads. Runs classification first; on success runs LPO, Performa, and
-    Rice Quality extraction in parallel. PDFs use the first page only.
+    Requires two uploads: LPO and Rice Quality Report.
+    Optional form fields: inco_terms_list, suppliers (used for LPO extraction matching).
+    Runs classification first; on success runs LPO and Rice Quality extraction in parallel.
+    PDFs use the first page only.
     """
     logger.debug("Processing Shipment Form API")
+
     inco_list = _parse_list_form(inco_terms_list)
     if not inco_list:
         inco_list = ["CIF", "FOB", "EXWORKS", "C&F"]
@@ -109,28 +108,33 @@ async def shipment_form(
     if not (
         lpo_invoice
         and lpo_invoice.filename
-        and performa_invoice
-        and performa_invoice.filename
         and rice_quality_report
         and rice_quality_report.filename
     ):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "All three files are required: lpo_invoice, performa_invoice, "
-                "rice_quality_report"
-            ),
+            detail="Both files are required: lpo_invoice, rice_quality_report",
         )
 
-    lpo_png = _upload_to_png_bytes(lpo_invoice, "LPO")
-    performa_png = _upload_to_png_bytes(performa_invoice, "Performa Invoice")
-    rice_png = _upload_to_png_bytes(rice_quality_report, "Rice Quality Report")
+    # Process images in parallel for better latency
+    try:
+        lpo_png, rice_png = await asyncio.gather(
+            asyncio.to_thread(_upload_to_png_bytes, lpo_invoice, "LPO"),
+            asyncio.to_thread(_upload_to_png_bytes, rice_quality_report, "Rice Quality Report"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Image processing failed")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to process uploaded files: {e}"
+        ) from e
 
     meta_list: List[ExtractionMetadata] = []
 
     try:
         classified_data, cls_meta = await classify_shipment_documents(
-            [lpo_png, performa_png, rice_png]
+            [lpo_png, rice_png]
         )
     except Exception as e:
         logger.exception("Shipment classification failed")
@@ -147,9 +151,6 @@ async def shipment_form(
                 "error": "document_classification_failed",
                 "reason": classified_data.get("reason", ""),
                 "has_lpo": classified_data.get("has_lpo", False),
-                "has_performa_invoice": classified_data.get(
-                    "has_performa_invoice", False
-                ),
                 "has_ricequality_doc": classified_data.get("has_ricequality_doc", False),
                 "is_valid_document": False,
                 "classified_data": classified_data,
@@ -157,16 +158,13 @@ async def shipment_form(
         )
 
     try:
-        (lpo_result, lpo_meta), (performa_result, perf_meta), (rice_data, rice_meta) = (
-            await asyncio.gather(
-                extract_lpo_invoice(lpo_png),
-                extract_performa_invoice(
-                    performa_png,
-                    inco_terms_list=inco_list,
-                    suppliers=supplier_list,
-                ),
-                extract_rice_quality_report(rice_png),
-            )
+        (lpo_result, lpo_meta), (rice_data, rice_meta) = await asyncio.gather(
+            extract_lpo_invoice(
+                lpo_png,
+                inco_terms_list=inco_list,
+                suppliers=supplier_list,
+            ),
+            extract_rice_quality_report(rice_png),
         )
     except ValueError as e:
         logger.exception("Rice quality extraction failed")
@@ -179,7 +177,7 @@ async def shipment_form(
             status_code=500, detail=f"Document extraction failed: {e}"
         ) from e
 
-    for m in (lpo_meta, perf_meta, rice_meta):
+    for m in (lpo_meta, rice_meta):
         if m is not None:
             meta_list.append(m)
 
@@ -189,9 +187,6 @@ async def shipment_form(
         "lpo_invoice": lpo_result.model_dump(exclude_none=False)
         if lpo_result
         else None,
-        "performa_invoice": performa_result.model_dump(exclude_none=False)
-        if performa_result
-        else None,
         "metadata": aggregated.model_dump() if aggregated else None,
     }
     with_calcs = calculate_shipment_logistics(combined)
@@ -200,7 +195,6 @@ async def shipment_form(
 
     return ShipmentFormResponse(
         lpo_invoice=lpo_result,
-        performa_invoice=performa_result,
         metadata=aggregated,
         shipment_calculations=shipment_calculations,
         classified_data=classified_data,

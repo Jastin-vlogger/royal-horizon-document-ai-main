@@ -1,7 +1,11 @@
-"""Unit tests for shipment_calculations post-processing (logistics + price reconciliation)."""
+"""Unit tests for shipment_calculations post-processing (LPO-only logistics)."""
 
 import pytest
 
+from src.core.lpo_invoice_business_logics import (
+    canonical_buying_unit_from_uom,
+    normalize_inco_terms_to_allowed,
+)
 from src.core.shipment_calculations import (
     calculate_shipment_logistics,
     parse_currency_value,
@@ -9,107 +13,120 @@ from src.core.shipment_calculations import (
 )
 
 
-def test_is_matching_mt_within_tolerance():
-    """9.80/bag * 100 bags/MT = 980 vs 985 → 0.5% diff → True."""
+def test_shipment_logistics_rice_example():
+    """
+    Example: 15,000 bags of 40kg rice.
+    - quantity_in_mt: 15000 * 40 / 1000 = 600 MT
+    - container_size: 20 (rice default)
+    - fcl: ceil(600 / 25) = 24
+    - bags_per_container: 25000 / 40 = 625
+    - pallets: ceil(15000 / 50) = 300
+    - fcl_per_unit: 625 * 22.40 = 14,000
+    - price_per_mt: 22.40 * 25 = 560
+    """
     parsed = {
         "lpo_invoice": {
+            "commodity": "rice",
+            "quantity_in_bags": "15,000.00",
+            "unit": "22.40",
+            "packaging": "BAG/1x40kg",
+        },
+        "metadata": None,
+    }
+    result = calculate_shipment_logistics(parsed)
+    sc = result["shipment_calculations"]
+    
+    assert sc["container_size"] == 20
+    assert sc["quantity_in_mt"] == 600.0
+    assert sc["fcl"] == 24
+    assert sc["bags"] == 15000
+    assert sc["bags_per_container"] == 625
+    assert sc["pallets"] == 300
+    assert sc["fcl_per_unit"] == 14000.0
+    assert sc["price_per_mt"] == 560.0
+
+
+def test_shipment_logistics_small_batch():
+    """
+    Small batch: 1,000 bags of 10kg rice.
+    - quantity_in_mt: 1000 * 10 / 1000 = 10 MT
+    - fcl: ceil(10 / 25) = 1
+    - bags_per_container: 25000 / 10 = 2500
+    - pallets: ceil(1000 / 50) = 20
+    """
+    parsed = {
+        "lpo_invoice": {
+            "commodity": "rice",
+            "quantity_in_bags": "1000",
             "unit": "9.80",
-            "packaging": "10 Kg",
-        },
-        "performa_invoice": {
-            "quantity": "480.000 MT (+- 5%)",
-            "price_per_mton": "USD 985.00 PMT",
+            "packaging": "10KG",
         },
         "metadata": None,
     }
     result = calculate_shipment_logistics(parsed)
     sc = result["shipment_calculations"]
-    assert sc["price_reconciled"] is True
-    assert sc["lpo_price_per_mt"] == 980.00
-    assert sc["pi_price_per_mt"] == 985.00
+    
+    assert sc["container_size"] == 20
+    assert sc["quantity_in_mt"] == 10.0
+    assert sc["fcl"] == 1
+    assert sc["bags"] == 1000
+    assert sc["bags_per_container"] == 2500
+    assert sc["pallets"] == 20
 
 
-def test_is_matching_mt_mismatch():
-    """Large price gap → price_reconciled False, both price fields present."""
+def test_shipment_logistics_missing_commodity():
+    """If commodity is missing, container_size should be None."""
     parsed = {
         "lpo_invoice": {
+            "commodity": None,
+            "quantity_in_bags": "1000",
             "unit": "9.80",
-            "packaging": "10 Kg",
-        },
-        "performa_invoice": {
-            "quantity": "100.00 MT",
-            "price_per_mton": "USD 1500.00 PMT",
+            "packaging": "10KG",
         },
         "metadata": None,
     }
     result = calculate_shipment_logistics(parsed)
     sc = result["shipment_calculations"]
-    assert sc["price_reconciled"] is False
-    assert sc["lpo_price_per_mt"] == 980.00
-    assert sc["pi_price_per_mt"] == 1500.00
+    
+    assert sc["container_size"] is None
+    assert sc["fcl"] is None
 
 
-def test_is_matching_mt_null_on_missing_price():
-    """If price_per_mton is null → price_reconciled, lpo_price_per_mt, pi_price_per_mt are None."""
+def test_shipment_logistics_missing_packaging():
+    """If packaging is missing, calculations should be None."""
     parsed = {
         "lpo_invoice": {
+            "commodity": "rice",
+            "quantity_in_bags": "1000",
             "unit": "9.80",
-            "packaging": "10 Kg",
-        },
-        "performa_invoice": {
-            "quantity": "100.00 MT",
-            "price_per_mton": None,
+            "packaging": None,
         },
         "metadata": None,
     }
     result = calculate_shipment_logistics(parsed)
     sc = result["shipment_calculations"]
-    assert sc["price_reconciled"] is None
-    assert sc["lpo_price_per_mt"] is None
-    assert sc["pi_price_per_mt"] is None
+    
+    assert sc["quantity_in_mt"] is None
+    assert sc["fcl"] is None
+    assert sc["price_per_mt"] is None
 
 
-def test_is_matching_mt_null_on_missing_lpo_unit():
-    """Missing LPO unit → price reconciliation fields None."""
+def test_shipment_logistics_missing_lpo():
+    """If LPO is missing, all calculations should be None."""
     parsed = {
-        "lpo_invoice": {
-            "unit": None,
-            "packaging": "10 Kg",
-        },
-        "performa_invoice": {
-            "quantity": "100.00 MT",
-            "price_per_mton": "USD 985.00 PMT",
-        },
+        "lpo_invoice": None,
         "metadata": None,
     }
     result = calculate_shipment_logistics(parsed)
     sc = result["shipment_calculations"]
-    assert sc["price_reconciled"] is None
-    assert sc["lpo_price_per_mt"] is None
-    assert sc["pi_price_per_mt"] is None
-
-
-def test_shipment_logistics_example():
-    """Quantity 2500 MT, packaging 10 Kg → fcl, container_size, bags_per_container, bags, pallets."""
-    parsed = {
-        "lpo_invoice": {
-            "unit": "9.80",
-            "packaging": "10 Kg",
-        },
-        "performa_invoice": {
-            "quantity": "2500.00 MT",
-            "price_per_mton": "USD 985.00 PMT",
-        },
-        "metadata": None,
-    }
-    result = calculate_shipment_logistics(parsed)
-    sc = result["shipment_calculations"]
-    # quantity_mt 2500 > 25 → 40ft, capacity 26 MT
-    assert sc["container_size"] == "40ft"
-    assert sc["fcl"] == 97  # ceil(2500 / 26)
-    assert sc["bags_per_container"] == 2600  # 26000 / 10
-    assert sc["bags"] == 250000
-    assert sc["pallets"] == 5000  # ceil(250000 / 50)
+    
+    assert sc["container_size"] is None
+    assert sc["quantity_in_mt"] is None
+    assert sc["fcl"] is None
+    assert sc["bags"] is None
+    assert sc["pallets"] is None
+    assert sc["fcl_per_unit"] is None
+    assert sc["price_per_mt"] is None
 
 
 def test_parse_currency_value():
@@ -117,6 +134,7 @@ def test_parse_currency_value():
     assert parse_currency_value("USD 985.00 PMT") == 985.0
     assert parse_currency_value("9.80") == 9.8
     assert parse_currency_value("470,400.00") == 470400.0
+    assert parse_currency_value("22.40") == 22.4
 
 
 def test_parse_currency_value_invalid():
@@ -133,3 +151,29 @@ def test_parse_packaging_kg():
     assert parse_packaging_kg("40 KG") == 40.0
     assert parse_packaging_kg("4X10 KG") == 40.0
     assert parse_packaging_kg("BAG/1x10kg") == 10.0
+    assert parse_packaging_kg("1X40KG") == 40.0
+
+
+def test_parse_packaging_kg_invalid():
+    """parse_packaging_kg raises ValueError when unparseable."""
+    with pytest.raises(ValueError, match="Cannot parse"):
+        parse_packaging_kg("N/A")
+    with pytest.raises(ValueError, match="empty or not"):
+        parse_packaging_kg("")
+
+
+def test_canonical_buying_unit_from_uom():
+    """UOM column prefix before slash maps to canonical unit (e.g. BAGS -> BAG)."""
+    assert canonical_buying_unit_from_uom("BAGS/1*40KG") == "BAG"
+    assert canonical_buying_unit_from_uom("BAG/1x40kg") == "BAG"
+    assert canonical_buying_unit_from_uom("TONS/50") == "TON"
+
+
+def test_normalize_inco_terms_to_allowed():
+    """Extracted phrase maps to a single value from the allowed list."""
+    allowed = ["CIF", "FOB", "EXWORKS", "C&F"]
+    assert normalize_inco_terms_to_allowed("CIF JABEL ALI UAE.", allowed) == "CIF"
+    assert normalize_inco_terms_to_allowed("CIF JABEL ALI UAE", allowed) == "CIF"
+    assert normalize_inco_terms_to_allowed("C & F MUNDRA", ["C&F", "FOB"]) == "C&F"
+    assert normalize_inco_terms_to_allowed("FOB", allowed) == "FOB"
+    assert normalize_inco_terms_to_allowed("Unknown", allowed) is None

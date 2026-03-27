@@ -40,14 +40,12 @@ def _normalize_classification_dict(raw: dict[str, Any] | None) -> dict[str, Any]
         return {
             "is_valid_document": False,
             "has_lpo": False,
-            "has_performa_invoice": False,
             "has_ricequality_doc": False,
             "reason": "Classification response could not be parsed as JSON.",
         }
     out = {
         "is_valid_document": _coerce_bool(raw.get("is_valid_document")),
         "has_lpo": _coerce_bool(raw.get("has_lpo")),
-        "has_performa_invoice": _coerce_bool(raw.get("has_performa_invoice")),
         "has_ricequality_doc": _coerce_bool(raw.get("has_ricequality_doc")),
         "reason": raw.get("reason") if isinstance(raw.get("reason"), str) else "",
     }
@@ -61,16 +59,16 @@ async def classify_shipment_documents(
     image_bytes_ordered: list[bytes],
 ) -> Tuple[dict[str, Any], ExtractionMetadata]:
     """
-    Run classification on three images: LPO, Performa Invoice, Rice Quality Report.
-    Returns normalized dict (always includes the five contract fields) and LLM metadata.
+    Run classification on two images: LPO and Rice Quality Report.
+    Returns normalized dict (always includes the required contract fields) and LLM metadata.
     """
-    if len(image_bytes_ordered) != 3:
-        raise ValueError("classify_shipment_documents requires exactly three images")
+    if len(image_bytes_ordered) != 2:
+        raise ValueError("classify_shipment_documents requires exactly two images")
 
     content, metadata = await invoke_multi_image_vision_extraction(
         system_prompt=CLASSIFICATION_SYSTEM_PROMPT,
         image_bytes_list=image_bytes_ordered,
-        user_text="Analyze these three images. Classify these document"
+        user_text="Analyze these two images. Classify these documents"
     )
     logger.debug(f"Shipment classification raw: {content[:500]!r}...")
 

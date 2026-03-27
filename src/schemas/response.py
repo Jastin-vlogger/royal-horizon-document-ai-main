@@ -28,31 +28,20 @@ class LPOInvoiceResult(BaseModel):
     item_code: Optional[str] = None
     commodity: Optional[str] = None
     item: Optional[str] = None
-    quantity: Optional[str] = None
+    quantity_in_bags: Optional[str] = None
     unit: Optional[str] = None
     price: Optional[str] = None
     packaging: Optional[str] = None
-
-
-class PerformaInvoiceResult(BaseModel):
-    """Extracted key-value result for Performa Invoice document."""
-
-    model_config = ConfigDict(extra="allow")
-
-    supplier_details: Optional[str] = None
     inco_terms: Optional[str] = None
+    payment_terms: Optional[str] = None
+    vat: Optional[str] = None
+    total_amount: Optional[str] = None
+    quality: Optional[str] = None
     port_of_loading: Optional[str] = None
     port_of_discharge: Optional[str] = None
     pi_number: Optional[str] = None
     pi_date: Optional[str] = None
-    quantity: Optional[str] = None
-    price_per_mton: Optional[str] = None
-    total_price: Optional[str] = None
-    partial_shipment: Optional[str] = None
-    shipment_terms: Optional[str] = None
-    brand: Optional[str] = None
-    payment_terms: Optional[str] = None
-    container_size: Optional[int] = None
+    buying_unit: Optional[str] = None
 
 
 class ShipmentClassificationResult(BaseModel):
@@ -62,22 +51,18 @@ class ShipmentClassificationResult(BaseModel):
 
     is_valid_document: bool = False
     has_lpo: bool = False
-    has_performa_invoice: bool = False
     has_ricequality_doc: bool = False
     reason: str = ""
 
 
 class ShipmentFormResponse(BaseModel):
-    """Combined response from /shipment-form: LPO, Performa, calculations, classification, rice report, metadata."""
+    """Combined response from /shipment-form: LPO, calculations, classification, rice report, metadata."""
 
     lpo_invoice: Optional[LPOInvoiceResult] = Field(default=None, description="LPO extraction result.")
-    performa_invoice: Optional[PerformaInvoiceResult] = Field(
-        default=None, description="Performa invoice extraction result."
-    )
     metadata: Optional[ExtractionMetadata] = Field(default=None, description="Aggregated usage/cost metadata.")
     shipment_calculations: Optional[dict[str, Any]] = Field(
         default=None,
-        description="Derived logistics and price reconciliation (fcl, bags, is_price_matching, etc.).",
+        description="Derived logistics calculations (fcl, bags, quantity_in_mt, fcl_per_unit, price_per_mt, etc.).",
     )
     classified_data: Optional[dict[str, Any]] = Field(
         default=None,
@@ -95,10 +80,6 @@ class ShipmentFormResponse(BaseModel):
             out["lpo_invoice"] = self.lpo_invoice.model_dump(exclude_none=False)
         else:
             out["lpo_invoice"] = None
-        if self.performa_invoice is not None:
-            out["performa_invoice"] = self.performa_invoice.model_dump(exclude_none=False)
-        else:
-            out["performa_invoice"] = None
         if self.metadata is not None:
             out["metadata"] = self.metadata.model_dump()
         if self.shipment_calculations is not None:
