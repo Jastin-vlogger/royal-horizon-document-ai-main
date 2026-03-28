@@ -1,14 +1,15 @@
 # Royal Horizon Document AI
 
-Production-ready AI microservice for **key-value extraction** from business documents (Performa Invoice and LPO) using **GPT Vision** via LangChain.
+Production-ready AI microservice for **key-value extraction** from business documents (LPO and Rice Quality Report) using **GPT Vision** via LangChain.
 
 ## Features
 
-- **Shipment bundle**: LPO, Performa Invoice, and Rice Quality Report in one classified + extracted flow
+- **Shipment bundle**: LPO and Rice Quality Report in one classified + extracted flow
+- **Automated calculations**: FCL, quantity in MT, pallets, pricing per container and per MT
+- **Commodity normalization**: Extensible commodity type handling (rice, sugar)
 - **Formats**: PDF (first page only) and images (jpg, jpeg, png)
 - **Vision model**: GPT-4o (configurable) via LangChain + OpenAI
 - **Structured JSON** output with optional usage metadata (tokens, cost, latency)
-- **Configurable prompts** and validation lists (INCO terms, suppliers)
 
 ## Tech stack
 
@@ -33,17 +34,30 @@ Server runs at `http://0.0.0.0:8000` (configurable via `PORT` / `HOST`).
 ### `POST /shipment-form`
 
 - **Content-Type**: `multipart/form-data`
-- **Files** (all required):
+- **Files** (both required):
   - `lpo_invoice`: LPO (PDF or image)
-  - `performa_invoice`: Performa Invoice (PDF or image)
   - `rice_quality_report`: Rice Quality Report (PDF or image)
 - **Form fields** (optional):
-  - `inco_terms_list`: JSON array, e.g. `["CIF","FOB","EXWORKS"]`
-  - `suppliers`: JSON array, e.g. `["LEKH RAJ","M RAHEEM RICE PROCESSING MILLS"]`
+  - `inco_terms_list`: JSON array, e.g. `["CIF","FOB","EXWORKS"]` (defaults internally to `["CIF","FOB","EXWORKS","C&F"]` when omitted or empty)
+  - `suppliers`: JSON array, e.g. `["LEKH RAJ","M RAHEEM RICE PROCESSING MILLS"]` (used to guide vendor/inco matching in the LPO extraction prompt)
 
-**Flow**: A classification pass runs on all three pages (PDFs: first page only). If `is_valid_document` is false, the API returns **422** with a structured `detail` object (`error`, `reason`, flags, and `classified_data`). On success, LPO, Performa, and Rice Quality extractions run in parallel.
+**Flow**: A classification pass runs on both documents (PDFs: first page only). If `is_valid_document` is false, the API returns **422** with a structured `detail` object (`error`, `reason`, flags, and `classified_data`). On success, LPO and Rice Quality extractions run in parallel, followed by automated shipment calculations.
 
-**Response**: `lpo_invoice`, `performa_invoice`, `shipment_calculations`, `classified_data` (full classifier JSON), `s1_quality_report` (full rice-quality JSON), and cumulative `metadata` (tokens, cost, latency summed across all LLM calls).
+**Response**: 
+- `lpo_invoice`: Extracted LPO fields including UOM-derived `buying_unit` (e.g. `BAG` from `BAGS/1*40KG`), Terms & Conditions (`inco_terms`, `payment_terms`, `quality`, `vat`, `total_amount`)
+- `shipment_calculations`: Automated logistics calculations (container_size, quantity_in_mt, fcl, bags, bags_per_container, pallets, fcl_per_unit, price_per_mt)
+- `classified_data`: Full classifier JSON with validation flags
+- `s1_quality_report`: Full rice-quality JSON
+- `metadata`: Cumulative tokens, cost, and latency summed across all LLM calls
+
+**Shipment Calculations**: The system automatically calculates:
+- Container size based on commodity type (rice → 20ft)
+- Quantity in metric tons from bags and packaging weight
+- FCL (Full Container Load) - number of containers needed
+- Bags per container and total pallets
+- Pricing per container (FCL per unit) and per metric ton
+
+See [docs/SHIPMENT_CALCULATIONS.md](docs/SHIPMENT_CALCULATIONS.md) for detailed calculation formulas and examples.
 
 ### `POST /arrival-notice/extract`
 
@@ -93,11 +107,13 @@ royal-horizon-document-ai/
 ├── pyproject.toml
 ├── Dockerfile
 ├── docker-compose.yml
+├── docs/
+│   └── SHIPMENT_CALCULATIONS.md  # Calculation formulas guide
 ├── src/
 │   ├── config/       # logger, settings
-│   ├── prompts/      # performa_invoice, lpo_invoice
+│   ├── prompts/      # lpo_invoice, shipment_classification
 │   ├── schemas/      # request, response
-│   ├── core/         # llm, document_processor, *_business_logics
+│   ├── core/         # llm, document_processor, *_business_logics, commodity_normalizer
 │   ├── routes/       # apis
 │   ├── utils/        # cost_calculator
 │   └── main.py

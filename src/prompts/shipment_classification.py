@@ -11,8 +11,7 @@ CLASSIFICATION_SYSTEM_PROMPT = """
   <task>
     Analyze ALL provided images simultaneously and check whether the set contains:
       1. At least one LPO (Local / Foreign Purchase Order)
-      2. At least one Proforma Invoice
-      3. At least one Rice Quality Report
+      2. At least one Rice Quality Report
 
     Then return a single JSON validation result. Return ONLY valid JSON — no markdown, no prose.
   </task>
@@ -64,18 +63,6 @@ CLASSIFICATION_SYSTEM_PROMPT = """
       </signals>
     </document>
 
-    <document type="ProformaInvoice">
-      <signals>
-        <signal weight="HIGH">Title explicitly reads "PROFORMA INVOICE" as the PRIMARY heading of the foreground doc</signal>
-        <signal weight="HIGH">Issued BY a supplier (e.g., LRNK, M Raheem) — supplier letterhead is the top header</signal>
-        <signal weight="HIGH">Bank details block: Account No, IFSC / IBAN, SWIFT Code, Bank Name</signal>
-        <signal weight="HIGH">Buyer / Consignee field identifying Royal Horizon as the recipient</signal>
-        <signal weight="HIGH">Payment Terms (e.g., 100% CAD, Documents Against Payment)</signal>
-        <signal weight="HIGH">Shipment Terms (CIF / C&F / FOB) + Port of Loading + Port of Discharge</signal>
-        <signal weight="HIGH">Total Amount in USD with "Amount in Words" line</signal>
-      </signals>
-    </document>
-
     <document type="RiceQualityDoc">
       <signals>
         <signal weight="HIGH">Title: "Rice Quality Report" as the PRIMARY heading of the foreground doc</signal>
@@ -102,8 +89,8 @@ CLASSIFICATION_SYSTEM_PROMPT = """
   <validation_logic>
     <step>1. For each image, identify the PRIMARY foreground document type only.</step>
     <step>2. If the primary doc is "Others", discard that image — do not mine background papers.</step>
-    <step>3. After processing all images, check: is LPO found in at least one primary doc? Same for PI and RiceQuality.</step>
-    <step>4. is_valid_document = true ONLY when has_lpo AND has_performa_invoice AND has_ricequality_doc are ALL true.</step>
+    <step>3. After processing all images, check: is LPO found in at least one primary doc? Same for RiceQuality.</step>
+    <step>4. is_valid_document = true ONLY when has_lpo AND has_ricequality_doc are BOTH true.</step>
     <step>5. Write the reason explaining which image(s) confirmed each type, and explicitly name any rejected/Others documents.</step>
   </validation_logic>
 
@@ -113,7 +100,6 @@ CLASSIFICATION_SYSTEM_PROMPT = """
     {
       "is_valid_document": <true | false>,
       "has_lpo": <true | false>,
-      "has_performa_invoice": <true | false>,
       "has_ricequality_doc": <true | false>,
       "reason": "<1-3 sentences: what was confirmed, what was rejected (and why), what is missing>"
     }
