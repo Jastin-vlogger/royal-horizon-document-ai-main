@@ -37,6 +37,9 @@ If the document value does not exactly match one of the allowed lists, pick the 
 - "PO No." label → its value is the purchase order number (e.g., PC01/26/00635)
 - "PO Date" label → its value is the date (e.g., 2026-03-03)
 - "Vendor" label (top-left of header table) → its value is the vendor/supplier name (e.g., LEKH RAJ NARINDER KUMAR)
+- **Contact / address block**: May include telephone, TRN, and **email** — look for any `user@domain` style address associated with the vendor.
+- **Shipping / logistics block** (may appear below vendor or in a separate column): labels such as "Port of Loading", "POL", "Loading Port", "Port of Discharge", "POD", "Discharge Port".
+- **Banking block**: Often directly **below** "Port of Loading" (or adjacent): "Bank Name", "Bank", "Beneficiary Bank", or similar — the name of the bank as printed.
 
 ### LINE ITEMS TABLE (middle section with columns):
 The table has these columns (left to right):
@@ -58,17 +61,29 @@ The table has these columns (left to right):
 
 3. **vendor**: Header section, to the RIGHT of "Vendor" or "Address" row. Full name as printed. Prefer a match from the allowed suppliers list when possible.
 
-4. **inco_terms**: From "Terms & Conditions" section (bottom of document). Look for line starting with "Inco Terms:" or similar. Extract the full text including location if printed (e.g., "CIF JABEL ALI UAE"). The server will normalize this to **exactly one** value from the allowed inco_terms list above.
+4. **vendor_email**: Extract the **vendor / supplier email** from the header or contact area (any line containing `@` that clearly belongs to the vendor). Copy exactly as printed (lowercase is fine). If multiple emails exist, prefer the vendor's. If none, null.
 
-5. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100 % CAD Bank to Bank").
+5. **port_of_loading**: From the header or shipping block, the value next to "Port of Loading", "POL", "Loading Port", or equivalent. Full text as printed (city/port name). If absent, null.
 
-6. **vat**: From the summary section near bottom, look for "VAT" row with percentage. Extract the numeric value (e.g., "0.00" or "5"). If VAT shows "5%" label but value is "0.00", extract "0.00".
+6. **port_of_discharge**: From the header or shipping block, the value next to "Port of Discharge", "POD", "Discharge Port", or equivalent. Full text as printed. If absent, null.
 
-7. **total_amount**: From the summary section, "Total Amount" row. Extract the numeric value exactly as shown (e.g., "336,000.00").
+7. **bank_name**: From the banking section — often **immediately below** "Port of Loading" or in a labeled "Bank Name" / "Bank" row. Extract the bank name only (no SWIFT/IBAN unless the bank name is inseparable). If absent, null.
 
-8. **quality**: From "Terms & Conditions" section, the block starting with "Quality:" (or quality specifications). Extract the COMPLETE text including all specifications, percentages, and parameters.
+8. **pi_number**: If the document mentions a Proforma Invoice number (e.g. "PI 236", "P.I. No."), extract the number/reference as printed. If in Terms under "Reference", parse the PI identifier. If absent, null.
 
-9. **items**: Extract ALL line items from the line items table as an array. For EACH row in the table, extract:
+9. **pi_date**: Date associated with the PI (e.g. next to "PI ... Date" or "Melyar PI 236 Date 2/12/2025"). Return **YYYY-MM-DD** when the date is clear; otherwise the exact string as printed. If absent, null.
+
+10. **inco_terms**: From "Terms & Conditions" section (bottom of document). Look for line starting with "Inco Terms:" or similar. Extract the full text including location if printed (e.g., "CIF JABEL ALI UAE"). The server will normalize this to **exactly one** value from the allowed inco_terms list above.
+
+11. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100 % CAD Bank to Bank").
+
+12. **vat**: From the summary section near bottom, look for "VAT" row with percentage. Extract the numeric value (e.g., "0.00" or "5"). If VAT shows "5%" label but value is "0.00", extract "0.00".
+
+13. **total_amount**: From the summary section, "Total Amount" row. Extract the numeric value exactly as shown (e.g., "336,000.00").
+
+14. **quality**: From "Terms & Conditions" section, the block starting with "Quality:" (or quality specifications). Extract the COMPLETE text including all specifications, percentages, and parameters.
+
+15. **items**: Extract ALL line items from the line items table as an array. For EACH row in the table, extract:
    - **item_code**: "Item Code" column. Exactly as printed (e.g., 1-RH1-01B-0056).
    - **commodity**: "Description" column. Extract ONLY the **first main product category word(s)** — the primary noun before the dash.
      * Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → commodity = "Rice"
@@ -90,6 +105,12 @@ Return ONLY a valid JSON object. No explanation, no markdown, no extra text. Exa
   "po_number": "...",
   "po_date": "...",
   "vendor": "...",
+  "vendor_email": "...",
+  "port_of_loading": "...",
+  "port_of_discharge": "...",
+  "bank_name": "...",
+  "pi_number": "...",
+  "pi_date": "YYYY-MM-DD or as printed",
   "inco_terms": "...",
   "payment_terms": "...",
   "vat": "...",

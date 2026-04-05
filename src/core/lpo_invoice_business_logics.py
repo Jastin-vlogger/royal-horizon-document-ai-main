@@ -179,16 +179,23 @@ async def extract_lpo_invoice(
         )
         data["inco_terms"] = mapped
 
-    # Post-process: add default null fields for header
+    # Post-process: add default null fields for header (ensure keys exist for API contract)
     defaults = {
+        "vendor_email": None,
         "port_of_loading": None,
         "port_of_discharge": None,
+        "bank_name": None,
         "pi_number": None,
         "pi_date": None,
     }
     for key, value in defaults.items():
         if key not in data:
             data[key] = value
+
+    for key in ("vendor_email", "port_of_loading", "port_of_discharge", "bank_name", "pi_number", "pi_date"):
+        val = data.get(key)
+        if isinstance(val, str) and not val.strip():
+            data[key] = None
 
     # Post-process: normalize each line item
     items_raw = data.get("items", [])

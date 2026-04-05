@@ -40,15 +40,23 @@ class LPOInvoiceResult(BaseModel):
     po_number: Optional[str] = None
     po_date: Optional[str] = None
     vendor: Optional[str] = None
+    vendor_email: Optional[str] = Field(
+        default=None,
+        description="Vendor/supplier email from the LPO header or contact block.",
+    )
+    port_of_loading: Optional[str] = None
+    port_of_discharge: Optional[str] = None
+    bank_name: Optional[str] = Field(
+        default=None,
+        description="Bank name as printed (often below Port of Loading or in payment/bank block).",
+    )
+    pi_number: Optional[str] = None
+    pi_date: Optional[str] = None
     inco_terms: Optional[str] = None
     payment_terms: Optional[str] = None
     vat: Optional[str] = None
     total_amount: Optional[str] = None
     quality: Optional[str] = None
-    port_of_loading: Optional[str] = None
-    port_of_discharge: Optional[str] = None
-    pi_number: Optional[str] = None
-    pi_date: Optional[str] = None
     items: list[LPOLineItem] = Field(
         default_factory=list,
         description="Line items from the LPO table; empty list if none extracted",
