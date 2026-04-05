@@ -58,38 +58,27 @@ The table has these columns (left to right):
 
 3. **vendor**: Header section, to the RIGHT of "Vendor" or "Address" row. Full name as printed. Prefer a match from the allowed suppliers list when possible.
 
-4. **item_code**: "Item Code" column of the line items table. Exactly as printed (e.g., 1-RH1-01B-0056).
+4. **inco_terms**: From "Terms & Conditions" section (bottom of document). Look for line starting with "Inco Terms:" or similar. Extract the full text including location if printed (e.g., "CIF JABEL ALI UAE"). The server will normalize this to **exactly one** value from the allowed inco_terms list above.
 
-5. **commodity**: "Description" column. Extract ONLY the **first main product category word(s)** — the primary noun before the dash.
-   - Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → commodity = "Rice"
-   - Example: "Cooking Oil - Sunflower 5L" → commodity = "Cooking Oil"
+5. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100 % CAD Bank to Bank").
 
-6. **item**: "Description" column. FULL description INCLUDING the commodity prefix (the complete value as printed).
-   - Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → item = "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg"
+6. **vat**: From the summary section near bottom, look for "VAT" row with percentage. Extract the numeric value (e.g., "0.00" or "5"). If VAT shows "5%" label but value is "0.00", extract "0.00".
 
-7. **quantity_in_bags**: "QTY" column. Numeric value exactly as shown (preserve commas if present). This represents the number of bags/units.
+7. **total_amount**: From the summary section, "Total Amount" row. Extract the numeric value exactly as shown (e.g., "336,000.00").
 
-8. **unit**: "Unit Price" column. Numeric value exactly as shown. This is the price per bag/unit.
+8. **quality**: From "Terms & Conditions" section, the block starting with "Quality:" (or quality specifications). Extract the COMPLETE text including all specifications, percentages, and parameters.
 
-9. **price**: "Total Price" column. Numeric value exactly as shown.
-
-10. **uom_raw**: **UOM column only** — the exact text as printed for the first line item (e.g., "BAGS/1*40KG", "BAG/1x40kg"). Do not normalize; copy exactly.
-
-11. **buying_unit**: Derived from **UOM** for the first line item. Take the part BEFORE the first "/" (slash). That is the buying unit token (e.g., "BAGS" from "BAGS/1*40KG"). Return the **canonical singular** form for trade units: "BAGS" → "BAG", "BAG" → "BAG". If the prefix is not a bag unit, return the uppercase token without the slash suffix (e.g., "TON", "MT").
-
-12. **packaging**: From the same UOM cell: normalize to format like 1X10KG, 4X10KG (uppercase, X between numbers).
-   - From UOM: "BAG/1x10kg" → "1X10KG"; "BAGS/1*40KG" → "1X40KG"; "4*10 kg" → "4X10KG".
-   - From Description if UOM absent: extract measurable terms and normalize (e.g., "10kg" → "10KG", "1x10kg" → "1X10KG").
-
-13. **inco_terms**: From "Terms & Conditions" section (bottom of document). Look for line starting with "Inco Terms:" or similar. Extract the full text including location if printed (e.g., "CIF JABEL ALI UAE"). The server will normalize this to **exactly one** value from the allowed inco_terms list above.
-
-14. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100 % CAD Bank to Bank").
-
-15. **vat**: From the summary section near bottom, look for "VAT" row with percentage. Extract the numeric value (e.g., "0.00" or "5"). If VAT shows "5%" label but value is "0.00", extract "0.00".
-
-16. **total_amount**: From the summary section, "Total Amount" row. Extract the numeric value exactly as shown (e.g., "336,000.00").
-
-17. **quality**: From "Terms & Conditions" section, the block starting with "Quality:" (or quality specifications). Extract the COMPLETE text including all specifications, percentages, and parameters.
+9. **items**: Extract ALL line items from the line items table as an array. For EACH row in the table, extract:
+   - **item_code**: "Item Code" column. Exactly as printed (e.g., 1-RH1-01B-0056).
+   - **commodity**: "Description" column. Extract ONLY the **first main product category word(s)** — the primary noun before the dash.
+     * Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → commodity = "Rice"
+     * Example: "Cooking Oil - Sunflower 5L" → commodity = "Cooking Oil"
+   - **item**: "Description" column. FULL description INCLUDING the commodity prefix (the complete value as printed).
+     * Example: "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg" → item = "Rice - Goldasteh Long Grain Sella Rice 1718 - 10 Kg"
+   - **quantity_in_bags**: "QTY" column. Numeric value exactly as shown (preserve commas if present). This represents the number of bags/units.
+   - **unit**: "Unit Price" column. Numeric value exactly as shown. This is the price per bag/unit.
+   - **price**: "Total Price" column. Numeric value exactly as shown.
+   - **uom_raw**: **UOM column only** — the exact text as printed (e.g., "BAGS/1*40KG", "BAG/1x40kg"). Do not normalize; copy exactly.
 
 ---
 
@@ -101,23 +90,34 @@ Return ONLY a valid JSON object. No explanation, no markdown, no extra text. Exa
   "po_number": "...",
   "po_date": "...",
   "vendor": "...",
-  "item_code": "...",
-  "commodity": "...",
-  "item": "...",
-  "quantity_in_bags": "...",
-  "unit": "...",
-  "price": "...",
-  "uom_raw": "...",
-  "buying_unit": "...",
-  "packaging": "...",
   "inco_terms": "...",
   "payment_terms": "...",
   "vat": "...",
   "total_amount": "...",
-  "quality": "..."
+  "quality": "...",
+  "items": [
+    {{
+      "item_code": "...",
+      "commodity": "...",
+      "item": "...",
+      "quantity_in_bags": "...",
+      "unit": "...",
+      "price": "...",
+      "uom_raw": "..."
+    }},
+    {{
+      "item_code": "...",
+      "commodity": "...",
+      "item": "...",
+      "quantity_in_bags": "...",
+      "unit": "...",
+      "price": "...",
+      "uom_raw": "..."
+    }}
+  ]
 }}
 
-If multiple line items exist, return a single object with the first line item's values (po_number, po_date, vendor repeated). For quantity_in_bags, unit, price use the first row or aggregate as appropriate for a single JSON.
+**IMPORTANT**: Extract ALL line items from the table. If there are 2 rows, return 2 items. If there are 5 rows, return 5 items. Do NOT skip any rows.
 
 If any field value is not legible or not present, use null.
 """.strip()

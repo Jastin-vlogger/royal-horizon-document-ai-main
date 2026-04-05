@@ -1,6 +1,6 @@
 """Response schemas for the document extraction API."""
 
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
@@ -17,21 +17,29 @@ class ExtractionMetadata(BaseModel):
     model: str = ""
 
 
+class LPOLineItem(BaseModel):
+    """Individual line item from LPO document."""
+
+    model_config = ConfigDict(extra="allow")
+
+    item_code: Optional[str] = None
+    commodity: Optional[str] = None
+    item: Optional[str] = Field(default=None, description="Full item description")
+    quantity_in_bags: Optional[str] = None
+    unit: Optional[str] = Field(default=None, description="Price per bag/unit")
+    price: Optional[str] = Field(default=None, description="Total price for this line item")
+    packaging: Optional[str] = Field(default=None, description="e.g., 1X10KG, 1X25KG")
+    buying_unit: Optional[str] = Field(default=None, description="e.g., BAG, TON")
+
+
 class LPOInvoiceResult(BaseModel):
-    """Extracted key-value result for LPO document."""
+    """Extracted key-value result for LPO document with support for multiple line items."""
 
     model_config = ConfigDict(extra="allow")
 
     po_number: Optional[str] = None
     po_date: Optional[str] = None
     vendor: Optional[str] = None
-    item_code: Optional[str] = None
-    commodity: Optional[str] = None
-    item: Optional[str] = None
-    quantity_in_bags: Optional[str] = None
-    unit: Optional[str] = None
-    price: Optional[str] = None
-    packaging: Optional[str] = None
     inco_terms: Optional[str] = None
     payment_terms: Optional[str] = None
     vat: Optional[str] = None
@@ -41,7 +49,10 @@ class LPOInvoiceResult(BaseModel):
     port_of_discharge: Optional[str] = None
     pi_number: Optional[str] = None
     pi_date: Optional[str] = None
-    buying_unit: Optional[str] = None
+    items: list[LPOLineItem] = Field(
+        default_factory=list,
+        description="Line items from the LPO table; empty list if none extracted",
+    )
 
 
 class ShipmentClassificationResult(BaseModel):

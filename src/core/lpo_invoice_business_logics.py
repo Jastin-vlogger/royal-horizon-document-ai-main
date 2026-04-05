@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 from src.core.llm import invoke_vision_extraction
 from src.core.commodity_normalizer import normalize_commodity
 from src.prompts.lpo_invoice import get_lpo_invoice_system_prompt
-from src.schemas.response import ExtractionMetadata, LPOInvoiceResult
+from src.schemas.response import ExtractionMetadata, LPOInvoiceResult, LPOLineItem
 from src.config.logger import logger
 
 
@@ -164,25 +164,11 @@ async def extract_lpo_invoice(
     if data is None:
         logger.warning("LPO Invoice Parsed Failed, returning None")
         return None, metadata
-    # If model returned a list (multiple line items), take first and flatten
-    if isinstance(data, list) and len(data) > 0:
-        data = data[0] if isinstance(data[0], dict) else data
-
-    # Post-process: UOM column drives packaging + buying_unit; uom_raw is internal only
-    uom_raw = data.pop("uom_raw", None)
-    if isinstance(uom_raw, str) and uom_raw.strip():
-        uom_raw = uom_raw.strip()
-        data["packaging"] = normalize_packaging_uom(uom_raw)
-        data["buying_unit"] = canonical_buying_unit_from_uom(uom_raw)
-    elif data.get("packaging"):
-        data["packaging"] = normalize_packaging_uom(data["packaging"])
-
-    if data.get("buying_unit") and isinstance(data["buying_unit"], str):
-        bu = data["buying_unit"].strip()
-        if "/" not in bu:
-            data["buying_unit"] = canonical_buying_unit_from_uom(f"{bu}/")
-        else:
-            data["buying_unit"] = canonical_buying_unit_from_uom(bu)
+    
+    # Ensure data is a dict (not a list)
+    if isinstance(data, list):
+        logger.warning("LPO extraction returned a list instead of dict, taking first element")
+        data = data[0] if len(data) > 0 and isinstance(data[0], dict) else {}
 
     # Post-process: inco_terms must be exactly one value from inco_terms_list
     raw_inco = data.get("inco_terms")
@@ -193,11 +179,7 @@ async def extract_lpo_invoice(
         )
         data["inco_terms"] = mapped
 
-    # Post-process: normalize commodity to allowed values
-    if data.get("commodity"):
-        data["commodity"] = normalize_commodity(data["commodity"])
-    
-    # Post-process: add default null fields
+    # Post-process: add default null fields for header
     defaults = {
         "port_of_loading": None,
         "port_of_discharge": None,
@@ -208,10 +190,55 @@ async def extract_lpo_invoice(
         if key not in data:
             data[key] = value
 
+    # Post-process: normalize each line item
+    items_raw = data.get("items", [])
+    if not isinstance(items_raw, list):
+        logger.warning("items field is not a list, setting to empty list")
+        items_raw = []
+    
+    processed_items = []
+    for item_data in items_raw:
+        if not isinstance(item_data, dict):
+            logger.warning(f"Skipping non-dict item: {item_data}")
+            continue
+        
+        # Extract and remove uom_raw (internal field)
+        uom_raw = item_data.pop("uom_raw", None)
+        
+        # Derive packaging and buying_unit from uom_raw
+        if isinstance(uom_raw, str) and uom_raw.strip():
+            uom_raw = uom_raw.strip()
+            item_data["packaging"] = normalize_packaging_uom(uom_raw)
+            item_data["buying_unit"] = canonical_buying_unit_from_uom(uom_raw)
+        elif item_data.get("packaging"):
+            item_data["packaging"] = normalize_packaging_uom(item_data["packaging"])
+        
+        # Normalize buying_unit if present
+        if item_data.get("buying_unit") and isinstance(item_data["buying_unit"], str):
+            bu = item_data["buying_unit"].strip()
+            if "/" not in bu:
+                item_data["buying_unit"] = canonical_buying_unit_from_uom(f"{bu}/")
+            else:
+                item_data["buying_unit"] = canonical_buying_unit_from_uom(bu)
+        
+        # Normalize commodity
+        if item_data.get("commodity"):
+            item_data["commodity"] = normalize_commodity(item_data["commodity"])
+        
+        try:
+            line_item = LPOLineItem(**item_data)
+            processed_items.append(line_item)
+        except Exception as e:
+            logger.warning(f"Failed to parse line item: {e}, data: {item_data}")
+            continue
+    
+    # Update data with processed items
+    data["items"] = processed_items
+
     try:
         result = LPOInvoiceResult(**data)
-    except Exception:
-        logger.warning("LPO Invoice Parsed Failed, returning None")
+    except Exception as e:
+        logger.warning(f"LPO Invoice Parsed Failed: {e}, returning empty result")
         result = LPOInvoiceResult()
     logger.debug(f"LPO Invoice Result: {result}")
     return result, metadata

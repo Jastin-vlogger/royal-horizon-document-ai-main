@@ -69,17 +69,17 @@ def _parse_quantity_in_bags(quantity_str: Optional[str]) -> Optional[float]:
 
 def calculate_shipment_logistics(parsed_response: dict[str, Any]) -> dict[str, Any]:
     """
-    Compute shipment_calculations from LPO data only.
+    Compute aggregate shipment_calculations from LPO data with multiple line items.
     
-    Calculates:
-    - container_size: Based on commodity type (rice -> 20ft)
-    - quantity_in_mt: Calculated from bags and packaging weight
-    - fcl: Number of containers needed
-    - bags: Total number of bags (from LPO)
-    - bags_per_container: Bags that fit in one container
-    - pallets: Number of pallets needed
-    - fcl_per_unit: Price per container
-    - price_per_mt: Price per metric ton
+    For multi-item LPOs, aggregates across all items:
+    - container_size: Based on first item's commodity type (rice -> 20ft)
+    - quantity_in_mt: Sum of all item weights
+    - fcl: Total containers needed for all items
+    - bags: Total bags across all items
+    - bags_per_container: Average bags per container (total_bags / fcl)
+    - pallets: Total pallets needed
+    - fcl_per_unit: Total price / fcl (price per container)
+    - price_per_mt: Total price / total MT
     
     Returns the same dict with 'shipment_calculations' added/updated.
     """
@@ -99,9 +99,30 @@ def calculate_shipment_logistics(parsed_response: dict[str, Any]) -> dict[str, A
         }
         return parsed_response
     
-    # Extract commodity and determine container size
-    commodity = lpo.get("commodity")
-    container_size = get_commodity_container_size(commodity)
+    # Get items array
+    items = lpo.get("items", [])
+    if not isinstance(items, list) or len(items) == 0:
+        logger.warning("No items found in LPO, returning empty calculations")
+        parsed_response["shipment_calculations"] = {
+            "container_size": None,
+            "quantity_in_mt": None,
+            "fcl": None,
+            "bags": None,
+            "bags_per_container": None,
+            "pallets": None,
+            "fcl_per_unit": None,
+            "price_per_mt": None,
+        }
+        return parsed_response
+    
+    # Extract commodity from first item for container size determination
+    first_commodity = None
+    for item in items:
+        if isinstance(item, dict):
+            first_commodity = item.get("commodity")
+            break
+    
+    container_size = get_commodity_container_size(first_commodity)
     
     # Determine container capacity
     container_capacity_mt: Optional[float] = None
@@ -110,71 +131,121 @@ def calculate_shipment_logistics(parsed_response: dict[str, Any]) -> dict[str, A
     elif container_size == 40:
         container_capacity_mt = CONTAINER_40FT_CAPACITY_MT
     
-    # Parse packaging weight (kg per bag)
-    packing_kg: Optional[float] = None
-    if lpo.get("packaging"):
-        try:
-            packing_kg = parse_packaging_kg(str(lpo["packaging"]))
-        except ValueError as e:
-            logger.warning(f"Failed to parse packaging: {e}")
+    # Aggregate calculations across all items
+    total_bags: float = 0.0
+    total_mt: float = 0.0
+    total_price: float = 0.0
+    items_processed: int = 0
     
-    # Parse quantity in bags
-    quantity_in_bags = _parse_quantity_in_bags(lpo.get("quantity_in_bags"))
+    for item in items:
+        # Handle both dict and object (Pydantic model) items
+        if hasattr(item, "model_dump"):
+            item_dict = item.model_dump()
+        elif isinstance(item, dict):
+            item_dict = item
+        else:
+            logger.warning(f"Skipping invalid item type: {type(item)}")
+            continue
+        
+        # Parse quantity in bags for this item
+        item_quantity = _parse_quantity_in_bags(item_dict.get("quantity_in_bags"))
+        if item_quantity is None:
+            logger.warning(f"Skipping item with no quantity: {item_dict.get('item_code')}")
+            continue
+        
+        # Parse packaging weight for this item
+        item_packaging_kg: Optional[float] = None
+        if item_dict.get("packaging"):
+            try:
+                item_packaging_kg = parse_packaging_kg(str(item_dict["packaging"]))
+            except ValueError as e:
+                logger.warning(f"Failed to parse packaging for item {item_dict.get('item_code')}: {e}")
+                continue
+        else:
+            logger.warning(f"Skipping item with no packaging: {item_dict.get('item_code')}")
+            continue
+        
+        # Parse unit price for this item
+        item_price_per_bag: Optional[float] = None
+        if item_dict.get("unit"):
+            try:
+                item_price_per_bag = parse_currency_value(str(item_dict["unit"]))
+            except ValueError as e:
+                logger.warning(f"Failed to parse unit price for item {item_dict.get('item_code')}: {e}")
+        
+        # Calculate item weight in MT
+        item_mt = (item_quantity * item_packaging_kg) / 1000.0
+        
+        # Accumulate totals
+        total_bags += item_quantity
+        total_mt += item_mt
+        
+        if item_price_per_bag is not None:
+            total_price += item_quantity * item_price_per_bag
+        
+        items_processed += 1
+        logger.debug(
+            f"Item {item_dict.get('item_code')}: "
+            f"{item_quantity} bags × {item_packaging_kg}kg = {item_mt:.2f} MT @ {item_price_per_bag}/bag"
+        )
     
-    # Parse unit price (price per bag)
-    price_per_bag: Optional[float] = None
-    if lpo.get("unit"):
-        try:
-            price_per_bag = parse_currency_value(str(lpo["unit"]))
-        except ValueError as e:
-            logger.warning(f"Failed to parse unit price: {e}")
+    if items_processed == 0:
+        logger.warning("No valid items to calculate, returning empty calculations")
+        parsed_response["shipment_calculations"] = {
+            "container_size": container_size,
+            "quantity_in_mt": None,
+            "fcl": None,
+            "bags": None,
+            "bags_per_container": None,
+            "pallets": None,
+            "fcl_per_unit": None,
+            "price_per_mt": None,
+        }
+        return parsed_response
     
-    # Initialize calculation results
-    quantity_in_mt: Optional[float] = None
+    # Round total MT
+    total_mt = round(total_mt, 2)
+    total_bags_int = int(total_bags)
+    
+    # Calculate FCL (containers needed)
     fcl: Optional[int] = None
-    bags: Optional[int] = None
     bags_per_container: Optional[int] = None
-    pallets: Optional[int] = None
     fcl_per_unit: Optional[float] = None
-    price_per_mt: Optional[float] = None
     
-    # Calculate quantity in MT
-    if quantity_in_bags is not None and packing_kg is not None and packing_kg > 0:
-        quantity_in_mt = (quantity_in_bags * packing_kg) / 1000.0
-        quantity_in_mt = round(quantity_in_mt, 2)
-        bags = int(quantity_in_bags)
-    
-    # Calculate FCL and bags per container
-    if container_capacity_mt is not None and quantity_in_mt is not None and packing_kg is not None:
-        fcl = int(math.ceil(quantity_in_mt / container_capacity_mt))
-        container_capacity_kg = container_capacity_mt * 1000
-        bags_per_container = int(container_capacity_kg / packing_kg)
+    if container_capacity_mt is not None and total_mt > 0:
+        fcl = int(math.ceil(total_mt / container_capacity_mt))
         
-        # Calculate pallets
-        if bags is not None:
-            pallets = int(math.ceil(bags / BAGS_PER_PALLET))
+        # Bags per container (average across mixed packaging)
+        bags_per_container = int(math.ceil(total_bags / fcl))
         
-        # Calculate FCL per unit (price per container)
-        if price_per_bag is not None:
-            fcl_per_unit = bags_per_container * price_per_bag
+        # FCL per unit (price per container)
+        if total_price > 0:
+            fcl_per_unit = total_price / fcl
             fcl_per_unit = round(fcl_per_unit, 2)
     
+    # Calculate pallets
+    pallets: Optional[int] = None
+    if total_bags_int > 0:
+        pallets = int(math.ceil(total_bags_int / BAGS_PER_PALLET))
+    
     # Calculate price per MT
-    if price_per_bag is not None and packing_kg is not None and packing_kg > 0:
-        bags_per_mt = 1000.0 / packing_kg
-        price_per_mt = price_per_bag * bags_per_mt
+    price_per_mt: Optional[float] = None
+    if total_price > 0 and total_mt > 0:
+        price_per_mt = total_price / total_mt
         price_per_mt = round(price_per_mt, 2)
     
     shipment_calculations: dict[str, Any] = {
         "container_size": container_size,
-        "quantity_in_mt": quantity_in_mt,
+        "quantity_in_mt": total_mt if total_mt > 0 else None,
         "fcl": fcl,
-        "bags": bags,
+        "bags": total_bags_int if total_bags_int > 0 else None,
         "bags_per_container": bags_per_container,
         "pallets": pallets,
         "fcl_per_unit": fcl_per_unit,
         "price_per_mt": price_per_mt,
     }
+    
+    logger.debug(f"Aggregate calculations: {shipment_calculations}")
     
     out = dict(parsed_response)
     out["shipment_calculations"] = shipment_calculations
