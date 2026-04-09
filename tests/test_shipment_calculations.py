@@ -5,6 +5,7 @@ import pytest
 from src.core.lpo_invoice_business_logics import (
     canonical_buying_unit_from_uom,
     normalize_inco_terms_to_allowed,
+    normalize_payment_terms,
 )
 from src.core.shipment_calculations import (
     calculate_shipment_logistics,
@@ -193,6 +194,17 @@ def test_normalize_inco_terms_to_allowed():
     assert normalize_inco_terms_to_allowed("C & F MUNDRA", ["C&F", "FOB"]) == "C&F"
     assert normalize_inco_terms_to_allowed("FOB", allowed) == "FOB"
     assert normalize_inco_terms_to_allowed("Unknown", allowed) is None
+
+
+def test_normalize_payment_terms_percent_spacing():
+    """Spaces between a number and % are removed in API output."""
+    assert (
+        normalize_payment_terms("Payment 100 % CAD Bank to Bank.")
+        == "Payment 100% CAD Bank to Bank."
+    )
+    assert normalize_payment_terms("100% CAD") == "100% CAD"
+    assert normalize_payment_terms("50.5  % advance") == "50.5% advance"
+    assert normalize_payment_terms(None) is None
 
 
 def test_shipment_logistics_multi_item_same_packaging():

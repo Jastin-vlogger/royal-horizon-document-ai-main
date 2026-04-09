@@ -101,6 +101,19 @@ def normalize_inco_terms_to_allowed(
     return None
 
 
+def normalize_payment_terms(value: Optional[str]) -> Optional[str]:
+    """
+    Remove spaces between numeric amounts and '%' so API output matches e.g. '100%'
+    instead of '100 %'.
+    """
+    if value is None or not isinstance(value, str):
+        return value
+    if not value.strip():
+        return value
+    # e.g. "100 % CAD" -> "100% CAD"; "50.5  %" -> "50.5%"
+    return re.sub(r"(\d+(?:[.,]\d+)?)\s+%", r"\1%", value)
+
+
 def canonical_buying_unit_from_uom(uom: Optional[str]) -> Optional[str]:
     """
     From UOM cell text like 'BAGS/1*40KG' or 'BAG/1x40kg', return canonical buying unit (e.g. BAG).
@@ -178,6 +191,12 @@ async def extract_lpo_invoice(
             inco_list,
         )
         data["inco_terms"] = mapped
+
+    raw_payment = data.get("payment_terms")
+    if raw_payment is not None:
+        data["payment_terms"] = normalize_payment_terms(
+            raw_payment if isinstance(raw_payment, str) else str(raw_payment)
+        )
 
     # Post-process: add default null fields for header (ensure keys exist for API contract)
     defaults = {

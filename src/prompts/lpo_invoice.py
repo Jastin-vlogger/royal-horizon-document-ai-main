@@ -75,7 +75,7 @@ The table has these columns (left to right):
 
 10. **inco_terms**: From "Terms & Conditions" section (bottom of document). Look for line starting with "Inco Terms:" or similar. Extract the full text including location if printed (e.g., "CIF JABEL ALI UAE"). The server will normalize this to **exactly one** value from the allowed inco_terms list above.
 
-11. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100 % CAD Bank to Bank").
+11. **payment_terms**: From "Terms & Conditions" section. Look for line starting with "Payment" (e.g., line 8). Extract the full payment instruction text (e.g., "100% CAD Bank to Bank" — no space between a number and %).
 
 12. **vat**: From the summary section near bottom, look for "VAT" row with percentage. Extract the numeric value (e.g., "0.00" or "5"). If VAT shows "5%" label but value is "0.00", extract "0.00".
 
