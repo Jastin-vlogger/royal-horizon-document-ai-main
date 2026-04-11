@@ -98,6 +98,45 @@ def load_bill_document_pages(content: bytes, filename: str) -> list[bytes]:
     return [buf.getvalue()]
 
 
+def load_packaging_list_pages(content: bytes, filename: str) -> list[bytes]:
+    """
+    Load packaging list document pages (max 2 pages).
+
+    PDF → pages 1–2 as PNGs; image → one PNG.
+    Raises ValueError if PDF has more than 2 pages or is empty.
+    Raises PIL errors on corrupt images.
+    """
+    if is_pdf(filename):
+        # First check total page count
+        from pdf2image import pdfinfo_from_bytes
+
+        try:
+            info = pdfinfo_from_bytes(content)
+            total_pages = info.get("Pages", 0)
+            if total_pages > 2:
+                raise ValueError(
+                    f"Packaging list PDF has {total_pages} pages, but maximum 2 pages allowed"
+                )
+        except Exception:
+            # If we can't get page info, proceed and let conversion handle it
+            pass
+
+        pages = pdf_pages_to_png_images(content, first_page=1, last_page=2)
+        if len(pages) > 2:
+            raise ValueError(
+                f"Packaging list has {len(pages)} pages, but maximum 2 pages allowed"
+            )
+        return pages
+
+    # For images, just load as single page
+    pil_img = Image.open(io.BytesIO(content))
+    if pil_img.mode in ("RGBA", "P"):
+        pil_img = pil_img.convert("RGB")
+    buf = io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    return [buf.getvalue()]
+
+
 def load_image_bytes(content: bytes, filename: str) -> bytes:
     """
     Ensure we have image bytes. If content is PDF, convert first page to image.

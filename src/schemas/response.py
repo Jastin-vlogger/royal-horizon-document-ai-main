@@ -216,3 +216,25 @@ class BillNoExtractionResponse(BaseModel):
         if f.is_integer():
             return int(f)
         return f
+
+
+class EnhancedBillNoExtractionResponse(BaseModel):
+    """
+    Enhanced response for POST /purchase-tracker/fetch-details with packaging list data.
+    
+    Includes bill extraction data (with filtered containers), packaging list extraction,
+    and aggregated metadata.
+    """
+
+    bill_extracted_data: dict[str, Any] = Field(
+        ...,
+        description="Bill of Lading extracted data with filtered containers based on packaging list",
+    )
+    packaging_list: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Packaging list extracted data for the target brand",
+    )
+    metadata: ExtractionMetadata = Field(
+        ...,
+        description="Aggregated token usage and cost metadata from both extractions",
+    )
