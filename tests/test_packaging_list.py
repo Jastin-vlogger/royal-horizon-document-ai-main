@@ -49,10 +49,12 @@ class TestContainerMatcher:
             BillOfLadingContainerRow(container_no="UACU3580511", pkg_ct=1200),
         ]
 
-        match = find_matching_container("TCLU3895166", bill_containers)
+        match, score, match_type = find_matching_container("TCLU3895166", bill_containers)
         assert match is not None
         assert match.container_no == "TCLU3895166"
         assert match.pkg_ct == 1000
+        assert score == 1.0
+        assert match_type == "exact"
 
     def test_find_matching_container_normalized_match(self):
         """Test finding container with normalized match."""
@@ -60,10 +62,10 @@ class TestContainerMatcher:
             BillOfLadingContainerRow(container_no="TCLU3895166", pkg_ct=1000),
         ]
 
-        # Test with spaces and hyphens
-        match = find_matching_container("TCLU 389 5166", bill_containers)
+        match, score, match_type = find_matching_container("TCLU 389 5166", bill_containers)
         assert match is not None
         assert match.container_no == "TCLU3895166"
+        assert match_type == "exact"
 
     def test_find_matching_container_fuzzy_match(self):
         """Test finding container with fuzzy match."""
@@ -71,10 +73,25 @@ class TestContainerMatcher:
             BillOfLadingContainerRow(container_no="TCLU3895166", pkg_ct=1000),
         ]
 
-        # OCR error: last digit different
-        match = find_matching_container("TCLU3895167", bill_containers, threshold=0.85)
+        match, score, match_type = find_matching_container("TCLU3895167", bill_containers, threshold=0.85)
         assert match is not None
         assert match.container_no == "TCLU3895166"
+        assert score > 0.85
+        assert match_type == "fuzzy"
+
+    def test_find_matching_container_ocr_misread_fallback(self):
+        """Test that OCR misread (e.g. MSUU vs MRSU) is caught at 0.80 fallback threshold."""
+        bill_containers = [
+            BillOfLadingContainerRow(container_no="MRSU5837270", pkg_ct=625),
+        ]
+
+        match, score, match_type = find_matching_container(
+            "MSUU5837270", bill_containers, threshold=0.80
+        )
+        assert match is not None
+        assert match.container_no == "MRSU5837270"
+        assert score >= 0.80
+        assert match_type == "fuzzy"
 
     def test_find_matching_container_no_match(self):
         """Test finding container when no match exists."""
@@ -82,13 +99,15 @@ class TestContainerMatcher:
             BillOfLadingContainerRow(container_no="TCLU3895166", pkg_ct=1000),
         ]
 
-        match = find_matching_container("ABCD1234567", bill_containers)
+        match, score, match_type = find_matching_container("ABCD1234567", bill_containers)
         assert match is None
+        assert match_type == "none"
 
     def test_find_matching_container_empty_list(self):
         """Test finding container in empty list."""
-        match = find_matching_container("TCLU3895166", [])
+        match, score, match_type = find_matching_container("TCLU3895166", [])
         assert match is None
+        assert match_type == "none"
 
     def test_filter_containers_by_packaging_list(self):
         """Test filtering containers based on packaging list."""

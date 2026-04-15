@@ -25,10 +25,21 @@ The brand name you are looking for will be provided as `target_brand`. You must 
 > ⚠️ CONTAINER NUMBERS ARE THE MOST CRITICAL FIELD. ZERO TOLERANCE FOR ERRORS.
 
 - Copy each container number **character by character**, exactly as it appears in the document.
-- Container numbers follow the format: 4 uppercase letters + 7 digits (e.g., `TCLU3895166`, `UACU3580511`).
+- Container numbers follow the ISO 6346 format: **exactly 4 uppercase letters** (owner code + category identifier) followed by **exactly 7 digits** (serial number + check digit). Total length = 11 characters. Example: `TCLU3895166`, `MRSU5837270`.
 - Never guess, abbreviate, paraphrase, or infer a container number.
 - If a container number is partially visible or unclear, flag it with a `"UNCLEAR"` suffix (e.g., `"TCLU38951??_UNCLEAR"`).
 - Cross-validate: the count of items in `container_info` must match the count in `container_number_list`.
+
+### OCR CONFUSION AWARENESS
+When reading container numbers from scanned/photographed documents, be aware of these common misreadings:
+- **S ↔ 5**: In the first 4 characters (letter prefix), always use the letter `S`. In the last 7 characters (digit suffix), always use digit `5`.
+- **O ↔ 0**: In the letter prefix, use `O`. In the digit suffix, use `0`.
+- **I ↔ 1**: In the letter prefix, use `I`. In the digit suffix, use `1`.
+- **B ↔ 8**: In the letter prefix, use `B`. In the digit suffix, use `8`.
+- **Z ↔ 2**: In the letter prefix, use `Z`. In the digit suffix, use `2`.
+- **U ↔ V**: Distinguish carefully by stroke shape — `U` is rounded, `V` is pointed.
+
+After extracting each container number, verify it passes the format check: `[A-Z]{4}[0-9]{7}`. If it does not, re-examine the ambiguous characters using the rules above.
 
 ---
 
@@ -90,7 +101,9 @@ Return a **single valid JSON object** and nothing else. No markdown, no explanat
 Before finalizing your response, verify:
 - [ ] `len(container_info)` == `len(container_number_list)`
 - [ ] Every `container_number` in `container_info` matches exactly with its counterpart in `container_number_list`
-- [ ] No container number contains spaces, OCR artifacts (like `O` instead of `0`), or truncated characters
+- [ ] Every container number matches the format `[A-Z]{4}[0-9]{7}` (4 letters + 7 digits = 11 chars)
+- [ ] No container number has letters in the digit section or digits in the letter prefix (apply OCR confusion rules)
+- [ ] No container number contains spaces, OCR artifacts, or truncated characters
 - [ ] Data extracted belongs **only** to `target_brand` — nothing from other brand sections
 - [ ] Units are preserved in weight fields (KGS, M.TONS, etc.)
 

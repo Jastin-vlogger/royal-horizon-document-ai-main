@@ -21,6 +21,28 @@ bill_extraction_prompt = """
     <rule id="9">Container numbers must be extracted exactly as printed — preserving all letters and digits (e.g., "FCIU2664293").</rule>
     <rule id="10">If two pages/images are provided, treat Page 1 as the main B/L document and Page 2 as the container annexure.</rule>
 
+    <rule id="14">
+      CRITICAL — CONTAINER COUNT VALIDATION: The number of rows in the containers array MUST
+      equal number_of_containers extracted from Page 1. If your extracted rows are fewer than
+      number_of_containers, re-examine the annexure table — you are missing one or more rows.
+      Look carefully for rows that may be split across lines, partially obscured, or at the
+      very top/bottom of the table. Do NOT return until len(containers) == number_of_containers.
+    </rule>
+    <rule id="15">
+      CRITICAL — OCR AWARENESS FOR CONTAINER NUMBERS: Container numbers follow the ISO 6346
+      format: exactly 4 uppercase letters (owner code + category) followed by 6 digits and
+      1 check digit (total 11 characters). When reading container numbers character-by-character,
+      be aware of these common OCR/vision confusions:
+        - Letter S vs digit 5 (in the digit section, prefer 5; in the letter prefix, prefer S)
+        - Letter O vs digit 0 (in the digit section, prefer 0; in the letter prefix, prefer O)
+        - Letter I vs digit 1 (in the digit section, prefer 1; in the letter prefix, prefer I)
+        - Letter U vs letter V (distinguish carefully by stroke shape)
+        - Letter B vs digit 8 (in the digit section, prefer 8; in the letter prefix, prefer B)
+        - Letter Z vs digit 2 (in the digit section, prefer 2; in the letter prefix, prefer Z)
+      The first 4 characters are ALWAYS letters; the last 7 are ALWAYS digits.
+      If a character is ambiguous, use this format constraint to resolve it.
+    </rule>
+
     <rule id="11">
       CRITICAL — ROW ISOLATION: When reading the container annexure table on Page 2, treat
       each row as completely INDEPENDENT. Do NOT assume that adjacent rows have the same
@@ -262,7 +284,7 @@ bill_extraction_prompt = """
     Before returning your response, confirm ALL of the following:
     [ ] bl_number is alphanumeric with no spaces
     [ ] shipped_on_board_date is in YYYY-MM-DD format
-    [ ] number_of_containers == count of rows in containers array
+    [ ] number_of_containers == count of rows in containers array  ← MUST MATCH EXACTLY
     [ ] SUM of all pkg_ct values == number_of_bags  ← MOST CRITICAL CHECK
     [ ] No two adjacent rows share pkg_ct by assumption — each was read independently
     [ ] quantity_mt is in Metric Tons (not KGS)
@@ -271,6 +293,8 @@ bill_extraction_prompt = """
     [ ] freight_prepaid is JSON boolean, not string
     [ ] free_detention_days and maximum_detention_days are integers
     [ ] Every container_no is a non-empty uppercase string
+    [ ] Every container_no has exactly 4 letters + 7 digits (11 characters total)
+    [ ] No OCR confusions in container_no (S/5, O/0, I/1, B/8 placed correctly)
     [ ] Output is valid parseable JSON with no markdown
   </validation_checklist>
 

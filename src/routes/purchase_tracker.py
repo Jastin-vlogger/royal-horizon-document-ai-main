@@ -131,6 +131,21 @@ async def extract_bill_no_from_document(
     # Build initial bill response
     bill_response = build_bill_no_api_response(bill_extraction, bill_metadata)
     
+    # Validate bill container count vs declared count
+    declared_count = bill_response.number_of_containers
+    extracted_count = len(bill_response.containers)
+    if declared_count is not None and declared_count != extracted_count:
+        logger.warning(
+            f"Bill container count mismatch: declared={declared_count}, "
+            f"extracted={extracted_count}. Containers: "
+            f"{[c.container_no for c in bill_response.containers]}"
+        )
+    else:
+        logger.debug(
+            f"Bill containers OK: {extracted_count} extracted, "
+            f"numbers={[c.container_no for c in bill_response.containers]}"
+        )
+    
     # Process Packaging List if provided
     packaging_extraction = None
     packaging_metadata = None
@@ -190,20 +205,40 @@ async def extract_bill_no_from_document(
     
     # Filter containers if packaging list was successfully extracted
     if packaging_extraction and packaging_extraction.container_number_list:
-        logger.debug("Filtering bill containers based on packaging list")
+        pkg_container_numbers = packaging_extraction.container_number_list
+        bill_container_numbers = [c.container_no for c in bill_response.containers]
+
+        logger.info(
+            f"Pre-filter comparison: "
+            f"bill_containers({len(bill_container_numbers)})={bill_container_numbers}, "
+            f"pkg_containers({len(pkg_container_numbers)})={pkg_container_numbers}"
+        )
+
+        if len(bill_container_numbers) != len(pkg_container_numbers):
+            logger.warning(
+                f"Container count divergence: bill={len(bill_container_numbers)} "
+                f"vs packaging_list={len(pkg_container_numbers)}"
+            )
+
         original_container_count = len(bill_response.containers)
-        
+
         filtered_containers = filter_containers_by_packaging_list(
             bill_containers=bill_response.containers,
-            packaging_container_numbers=packaging_extraction.container_number_list,
+            packaging_container_numbers=pkg_container_numbers,
             fuzzy_threshold=0.85,
         )
-        
+
         bill_response.containers = filtered_containers
         logger.info(
             f"Container filtering: {len(filtered_containers)}/{original_container_count} "
             f"containers retained"
         )
+
+        if len(filtered_containers) < len(pkg_container_numbers):
+            logger.warning(
+                f"Some packaging containers had no bill match: "
+                f"matched={len(filtered_containers)}, expected={len(pkg_container_numbers)}"
+            )
     
     # Aggregate metadata
     if packaging_metadata:
