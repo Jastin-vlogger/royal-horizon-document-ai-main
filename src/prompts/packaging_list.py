@@ -50,7 +50,8 @@ For each matching brand section, extract the following:
 ### Top-level fields (shared across all containers in the brand section):
 | Field | What to look for in document |
 |---|---|
-| `expiry_date` | `EXPIRY:`, `EXPIRY DATE:`, `EXPIRY DATE :`, `EXP DATE:` — return as-is (e.g., "08/2027", "01/2028") |
+| `production_date` | `PACKING DATE:`, `PACKING DATE :`, `PRODUCTION DATE:`, `MFG DATE:`, `MANUFACTURE DATE:`, `MFD:`, `DATE OF MANUFACTURE:`, `PROD DATE:`, `DATE OF MFG:` — return as-is (e.g., "01/2026", "06/2025"). Use `null` if not found. **Note: In many rice/grain packing lists, the manufacture/production date appears as `PACKING DATE`.**  |
+| `expiry_date` | `EXPIRY:`, `EXPIRY DATE:`, `EXPIRY DATE :`, `EXP DATE:`, `BEST BEFORE:` — return as-is (e.g., "08/2027", "01/2028") |
 | `packing_description` | `PACKING:` field — e.g., "20KG POUCH BAG", "10KG BOPP BAG X 4 = 40KG MASTER" |
 
 ### Per-container fields (one entry per container row in the table):
@@ -77,6 +78,7 @@ Return a **single valid JSON object** and nothing else. No markdown, no explanat
 ```json
 {
   "brand": "<matched brand name as it appears in the document>",
+  "production_date": "<e.g., 01/2026 or null if not found — extracted from PACKING DATE, PRODUCTION DATE, MFG DATE, etc.>",
   "expiry_date": "<e.g., 08/2027 or null if not found>",
   "packing_description": "<e.g., 20KG POUCH BAG or null if not found>",
   "container_info": [

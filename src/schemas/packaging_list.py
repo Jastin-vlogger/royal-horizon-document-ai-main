@@ -25,6 +25,7 @@ class PackagingListExtraction(BaseModel):
     """Structured extraction from Packaging List document."""
 
     brand: Optional[str] = Field(default=None, description="Brand name as it appears in the document")
+    production_date: Optional[str] = Field(default=None, description="Production/manufacture date (e.g., 06/2025)")
     expiry_date: Optional[str] = Field(default=None, description="Expiry date (e.g., 08/2027)")
     packing_description: Optional[str] = Field(
         default=None, description="Packing description (e.g., 20KG POUCH BAG)"
