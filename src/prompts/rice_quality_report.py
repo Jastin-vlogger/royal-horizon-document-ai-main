@@ -2,9 +2,7 @@
 Rice Quality Report extraction system prompt
 
 Expected top-level keys in model JSON (example):
-  report_details, sample_details, quality_parameters, cooking_result, analysis_details
-
-Replace the placeholder string before production use.
+  report_details, sample_details, quality_parameters, cooking_result, analysis_details, remarks
 """
 
 rice_quality_prompt = """<system>
@@ -128,9 +126,43 @@ You are a precise document data extraction engine. Your sole purpose is to extra
   </section>
 
   <section name="cooking_result">
-    <description>Located below the quality parameters table, in a small labeled box.</description>
-    <field name="result_options">The label or options listed next to "Cooking Result" (e.g., "Bad/Normal/Good/Excellent").</field>
-    <field name="selected_result">The actual selected or written result next to "Result" (e.g., "Normal").</field>
+    <description>
+      Located below the quality parameters table. This section has TWO rows:
+      ROW 1: Label "Cooking Result" | Value: the options string (e.g., "Excellent /Good/Normal/Bad")
+      ROW 2: (no label)             | Value: the SELECTED/WRITTEN result (e.g., "NOMAL", "Normal", "Good")
+      The selected result is on its own line directly below the options row — it is NOT labeled.
+    </description>
+    <field name="result_options">
+      The options string from ROW 1, next to the label "Cooking Result".
+      E.g., "Excellent /Good/Normal/Bad". Extract exactly as printed.
+    </field>
+    <field name="selected_result">
+      The actual selected or written result from ROW 2 — the standalone value on the line BELOW the options.
+      E.g., "NOMAL", "Normal", "Good", "Excellent", "Bad".
+      This is NOT labeled — it is simply the written/circled result on its own line.
+      If blank, set to null.
+    </field>
+  </section>
+
+  <section name="remarks">
+    <description>
+      Located BELOW the cooking result section. It is a clearly labeled row:
+        Label: "Remarks"
+        Value: the remarks text (e.g., "QUALITY OF RICE IS NOT UP TO THE MARK")
+
+      This is a DOCUMENT-LEVEL overall remarks field — it is NOT the per-row "Remark" column
+      inside the quality_parameters table.
+
+      The label "Remarks" appears on the LEFT side of the row, and the value appears on the RIGHT.
+      Extract the FULL text of the value exactly as printed, preserving original casing.
+      If the Remarks row is blank or absent, set to null.
+    </description>
+    <field name="remarks">
+      Full text next to the label "Remarks" in the section below the cooking result.
+      Example: "QUALITY OF RICE IS NOT UP TO THE MARK"
+      Preserve exact casing and punctuation.
+      If blank or absent, set to null.
+    </field>
   </section>
 
   <section name="analysis_details">
@@ -197,6 +229,7 @@ Return ONLY the following JSON structure. Do not add extra keys. Do not omit any
     "result_options": string | null,
     "selected_result": string | null
   },
+  "remarks": string | null,
   "analysis_details": {
     "analyzed_by": string | null,
     "date": string | null,
@@ -223,6 +256,8 @@ Before returning your response, verify the following internally:
   [ ] All blank/empty/invisible fields are set to null, not empty string "".
   [ ] is_signed is strictly a boolean (true or false) — NOT a string, NOT null.
   [ ] strtg_stck_ref is from "Strtg Stck QR Ref." only — not from other_references.
+  [ ] remarks is the value next to the label "Remarks" below the cooking result section (e.g., "QUALITY OF RICE IS NOT UP TO THE MARK"). It is NOT the per-row remark column in quality_parameters. If the Remarks row is blank or absent, set to null.
+  [ ] cooking_result.selected_result is the standalone written result on the line BELOW the options row (e.g., "NOMAL") — NOT the options string itself.
   [ ] Output is raw JSON only — no markdown, no code block, no comments.
   [ ] No value has been inferred, guessed, or fabricated.
 </self_validation_checklist>
