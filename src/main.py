@@ -11,6 +11,7 @@ from src.routes.arrival_notice import router as arrival_notice_router
 from src.routes.bank_advice import router as bank_advice_router
 from src.routes.costsheet import router as costsheet_router
 from src.routes.purchase_tracker import router as purchase_tracker_router
+from src.routes.tax_invoice import router as tax_invoice_router
 
 
 @asynccontextmanager
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(bank_advice_router)
     app.include_router(costsheet_router)
     app.include_router(purchase_tracker_router)
+    app.include_router(tax_invoice_router)
     return app
 
 
