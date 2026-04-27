@@ -17,7 +17,7 @@ from src.schemas.arrival_notice import (
     ArrivalNoticeLLMOutput,
 )
 
-USER_MESSAGE_ARRIVAL_NOTICE = "Extract the two fields from these shipping document images and Return only the JSON object as instructed"
+USER_MESSAGE_ARRIVAL_NOTICE = "Extract the three fields from these shipping document images and return only the JSON object as instructed."
 
 _ARRIVAL_ALLOWED = {"pdf", "image"}
 
@@ -95,6 +95,7 @@ async def extract_arrival_notice_from_pages(
 
     parsed = parse_arrival_notice_llm_json(raw_text)
     return ArrivalNoticeExtractResponse(
+        print_date=parsed.print_date,
         arrival_on=parsed.arrival_on,
         free_retension_days=parsed.free_retension_days,
         metadata=meta,

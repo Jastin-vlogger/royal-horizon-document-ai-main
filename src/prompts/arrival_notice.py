@@ -11,10 +11,40 @@ arrival_notice_system_prompt = """
   <task>
     You will receive 1 to 4 document images (shipping documents, arrival notices,
     free-time notifications, or related cargo paperwork). Examine EVERY page thoroughly.
-    Extract ONLY the two fields defined below and return them as a single valid JSON object.
+    Extract ONLY the three fields defined below and return them as a single valid JSON object.
   </task>
 
   <fields>
+
+    <field name="print_date">
+      <description>
+        The document print / issue date shown on the arrival notice itself.
+        For your business workflow, this is the actual arrival notice date.
+      </description>
+      <location_hints>
+        Look for phrases near this field such as:
+        - "Print Date"
+        - "Printed Date"
+        - "Issue Date"
+        - "Document Date"
+        The date may include a time portion, for example: "2026-02-27 18:44".
+      </location_hints>
+      <extraction_rules>
+        - Extract the date tied specifically to the "Print Date" / "Printed Date" / "Issue Date" label.
+        - Ignore any time portion; keep only the date.
+        - Normalize it strictly to ISO 8601 format: YYYY-MM-DD.
+        - Examples of normalization:
+            "2026-02-27 18:44" → "2026-02-27"
+            "27/02/2026" → "2026-02-27"
+            "27-FEB-2026" → "2026-02-27"
+        - If both "Print Date" and "Issue Date" appear, prefer "Print Date".
+      </extraction_rules>
+      <null_rule>
+        If no print/issue date is found after thorough search, return null.
+        Do NOT use the vessel arrival date as a substitute.
+      </null_rule>
+      <output_format>String "YYYY-MM-DD" or null</output_format>
+    </field>
 
     <field name="arrival_on">
       <description>
@@ -106,6 +136,7 @@ arrival_notice_system_prompt = """
     </step>
     <step order="4">
       Before generating output, run internal validation:
+      - print_date must match the regex: ^\d{4}-\d{2}-\d{2}$ or be null
       - arrival_on must match the regex: ^\d{4}-\d{2}-\d{2}$ or be null
       - free_retension_days must match the regex: ^\d+ days$ or be null
       - If either validation fails, re-check extraction and correct it.
@@ -115,8 +146,8 @@ arrival_notice_system_prompt = """
   <output_rules>
     <rule>Return ONLY a single valid JSON object. No markdown, no backticks,
     no explanation, no preamble, no commentary.</rule>
-    <rule>The JSON must contain exactly two keys:
-    "arrival_on" and "free_retension_days".</rule>
+    <rule>The JSON must contain exactly three keys:
+    "print_date", "arrival_on", and "free_retension_days".</rule>
     <rule>Values must be either a valid string (per field format) or JSON null.</rule>
     <rule>Do NOT add extra keys, confidence scores, or notes to the JSON.</rule>
     <rule>Do NOT wrap the JSON in a code block.</rule>
@@ -124,6 +155,7 @@ arrival_notice_system_prompt = """
 
   <output_schema>
     {
+      "print_date": "YYYY-MM-DD" | null,
       "arrival_on": "YYYY-MM-DD" | null,
       "free_retension_days": "N days" | null
     }
@@ -133,21 +165,23 @@ arrival_notice_system_prompt = """
     <example id="1">
       <document_snippet>
         The above mentioned cargo is due to arrive aboard subject vessel
+        Print Date: 2026-01-02 14:45
         On/or About Date: 2026-01-04
         Applicable free time 14 days Combined (Detention and Demurrage)
         at port of discharge / place of delivery.
       </document_snippet>
       <correct_output>
-        {"arrival_on": "2026-01-04", "free_retension_days": "14 days"}
+        {"print_date": "2026-01-02", "arrival_on": "2026-01-04", "free_retension_days": "14 days"}
       </correct_output>
     </example>
     <example id="2">
       <document_snippet>
+        Print Date: 01-JAN-2026
         ETA: 04-JAN-2026
         Free Detention: 7 days | Free Demurrage: 5 days
       </document_snippet>
       <correct_output>
-        {"arrival_on": "2026-01-04", "free_retension_days": "5 days"}
+        {"print_date": "2026-01-01", "arrival_on": "2026-01-04", "free_retension_days": "5 days"}
       </correct_output>
       <reasoning>
         No combined value found; use smaller of detention vs demurrage (5 days).
@@ -159,7 +193,7 @@ arrival_notice_system_prompt = """
         Terms: Standard carrier tariff applies.
       </document_snippet>
       <correct_output>
-        {"arrival_on": null, "free_retension_days": null}
+        {"print_date": null, "arrival_on": null, "free_retension_days": null}
       </correct_output>
     </example>
   </examples>
@@ -169,6 +203,7 @@ arrival_notice_system_prompt = """
     <prohibition>NEVER return a date in any format other than YYYY-MM-DD.</prohibition>
     <prohibition>NEVER return free days as a number without the word "days".</prohibition>
     <prohibition>NEVER output text outside the JSON object.</prohibition>
+    <prohibition>NEVER confuse Print Date / Issue Date with vessel arrival_on; keep them separate.</prohibition>
     <prohibition>NEVER use the booking date, sailing date, or BL date as arrival_on.</prohibition>
     <prohibition>NEVER default free_retension_days to "14 days" if absent from the document.</prohibition>
   </strict_prohibitions>
