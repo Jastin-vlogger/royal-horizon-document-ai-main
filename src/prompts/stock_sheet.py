@@ -1,0 +1,67 @@
+"""Prompts for stock-sheet extraction."""
+
+
+STOCK_SHEET_SIGNATURE_PROMPT = """You are a document compliance checker.
+Inspect the provided stock-sheet image and determine whether ALL THREE signature
+fields have been physically signed (handwritten or stamped) by a person:
+  - Prepared By
+  - Reviewed By
+  - Approved By
+
+A field counts as SIGNED only when it contains a visible handwritten signature or
+ink stamp. An empty box, a printed name without a signature, or a label alone does
+NOT count as signed.
+
+Respond ONLY with valid JSON - no markdown, no explanation:
+{
+  "prepared_by_signed": true|false,
+  "reviewed_by_signed": true|false,
+  "approved_by_signed": true|false,
+  "all_signed": true|false,
+  "notes": "<brief observation if any field is missing>"
+}"""
+
+
+STOCK_SHEET_ORIENTATION_PROMPT = """You are a document orientation expert.
+You will receive one page image from a rice stock sheet.
+
+Evaluate the image and determine the required clockwise rotation to make it upright.
+
+RULES:
+1. Primary indicator: Text must read left-to-right, top-to-bottom.
+2. Secondary indicator: IF signature fields exist, they belong at the bottom.
+   If no signatures are visible, rely entirely on text direction.
+
+Respond ONLY with valid JSON in this exact shape:
+{
+  "is_text_upright": true|false,
+  "are_signatures_visible": true|false,
+  "rotation_degrees_needed": 0|90|180|270
+}
+No markdown, no explanation."""
+
+
+def build_stock_sheet_cleaner_prompt(canonical_keys: list[str]) -> str:
+    """Build cleaner prompt with canonical header list."""
+    keys = ", ".join(f'"{k}"' for k in canonical_keys)
+    return f"""You are a data normalization agent for OCR-extracted rice stock sheets.
+
+You will receive a JSON object with:
+  - "headers": list of raw OCR-extracted column names (may be garbled/merged)
+  - "rows": list of row objects with those headers as keys
+
+CANONICAL HEADERS (map EVERY raw header to the nearest match):
+[{keys}]
+
+RULES:
+1. "headers": Return EXACTLY the same count as input (1:1 map). Map each raw header
+   to the nearest canonical key. Keep unchanged if no reasonable match.
+2. "rows": Re-key each row using the fixed headers (positional - key[i] -> fixed_header[i]).
+3. Fix obvious OCR artifacts in numeric cells (e.g., "l,264"->1264, "S00"->500).
+4. Null indicators ("", "-", "--", "—", "N/A", "null", "*") -> null.
+5. Numeric values -> integer. "Unit" column may be decimal (e.g., 24.5).
+6. Do NOT invent values. Ambiguous non-numeric -> keep as string.
+
+Return ONLY valid JSON in this exact shape:
+{{"headers": [...], "rows": [{{...}}, ...]}}
+No markdown, no explanation."""

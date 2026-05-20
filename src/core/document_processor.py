@@ -83,13 +83,20 @@ def pdf_pages_to_png_images(
     return [_pil_page_to_png_bytes(p) for p in pages]
 
 
-def load_bill_document_pages(content: bytes, filename: str) -> list[bytes]:
+def load_bill_document_pages(
+    content: bytes,
+    filename: str,
+    max_pages: int = 2,
+) -> list[bytes]:
     """
-    Load up to two pages for B/L extraction: PDF → pages 1–2 as PNGs; image → one PNG.
+    Load pages for B/L extraction: PDF -> pages 1 through max_pages as PNGs; image -> one PNG.
     Raises ValueError on empty/unreadable PDF pages. Raises PIL errors on corrupt images.
     """
+    if max_pages < 1:
+        raise ValueError("max_pages must be at least 1")
+
     if is_pdf(filename):
-        return pdf_pages_to_png_images(content, first_page=1, last_page=2)
+        return pdf_pages_to_png_images(content, first_page=1, last_page=max_pages)
     pil_img = Image.open(io.BytesIO(content))
     if pil_img.mode in ("RGBA", "P"):
         pil_img = pil_img.convert("RGB")

@@ -111,7 +111,7 @@ class ShipmentFormResponse(BaseModel):
 
 
 class BillOfLadingContainerRow(BaseModel):
-    """One row from the container annexure (Page 2)."""
+    """One row from the container annexure pages."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -151,7 +151,7 @@ class BillOfLadingStructuredExtraction(BaseModel):
     invoice_number: Optional[str] = None
     containers: list[BillOfLadingContainerRow] = Field(
         default_factory=list,
-        description="Annexure rows; empty if Page 2 was not provided or has no table.",
+        description="Annexure rows; empty if no annexure page was provided or has no table.",
     )
     checksum_warning: Optional[bool] = Field(
         default=None,

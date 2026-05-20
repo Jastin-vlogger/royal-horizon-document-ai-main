@@ -19,7 +19,7 @@ bill_extraction_prompt = """
     <rule id="7">For boolean fields, return true or false (JSON boolean), not "Yes"/"No" strings.</rule>
     <rule id="8">Do not rename, add, or omit any key from the schema defined below.</rule>
     <rule id="9">Container numbers must be extracted exactly as printed — preserving all letters and digits (e.g., "FCIU2664293").</rule>
-    <rule id="10">If two pages/images are provided, treat Page 1 as the main B/L document and Page 2 as the container annexure.</rule>
+    <rule id="10">If multiple pages/images are provided, treat Page 1 as the main B/L document and Page 2 onward as the container annexure or continuation pages.</rule>
 
     <rule id="14">
       CRITICAL — CONTAINER COUNT VALIDATION: The number of rows in the containers array MUST
@@ -44,7 +44,7 @@ bill_extraction_prompt = """
     </rule>
 
     <rule id="11">
-      CRITICAL — ROW ISOLATION: When reading the container annexure table on Page 2, treat
+      CRITICAL — ROW ISOLATION: When reading the container annexure table on Page 2 onward, treat
       each row as completely INDEPENDENT. Do NOT assume that adjacent rows have the same
       pkg_ct value. Read the "Pkg Cnt" cell of every single row individually, even if it
       visually appears similar to the row above or below. Rows with lower indentation or
@@ -72,11 +72,11 @@ bill_extraction_prompt = """
   </strict_rules>
 
   <input_description>
-    You will receive one or two images:
+    You will receive one or more images:
     - IMAGE 1 (Page 1): The main Multi-Modal Transport Document / Bill of Lading.
-    - IMAGE 2 (Page 2): The container annexure table listing individual container details.
+    - IMAGE 2 onward: The container annexure table and continuation pages listing individual container details.
 
-    Both images belong to the same shipment. Extract all fields from both images and merge
+    All images belong to the same shipment. Extract all fields from all images and merge
     them into a single unified JSON response as defined in the output schema below.
   </input_description>
 
@@ -146,7 +146,7 @@ bill_extraction_prompt = """
       <description>
         Total number of bags/packages in the shipment. Found in the "DESCRIPTION OF GOODS"
         section on Page 1 (e.g., "13750 BAGS"). This value is the CHECKSUM TARGET used to
-        validate the sum of all pkg_ct values from Page 2.
+        validate the sum of all pkg_ct values from Page 2 onward.
       </description>
       <type>integer</type>
       <example>13750</example>
@@ -208,7 +208,7 @@ bill_extraction_prompt = """
 
     <field name="containers">
       <description>
-        List of container records from the annexure table on Page 2.
+        List of container records from the annexure table on Page 2 onward.
         Each row = one container. Extract ONLY container_no and pkg_ct.
 
         ⚠️ READ EACH ROW INDEPENDENTLY. Some rows will have a lower pkg_ct than
@@ -276,7 +276,7 @@ bill_extraction_prompt = """
       ]
     }
 
-    "containers" must be [] (empty array) if Page 2 is unavailable — never null.
+    "containers" must be [] (empty array) if no annexure/container table page is available — never null.
     "checksum_warning": true is only added if the pkg_ct sum cannot be reconciled.
   </output_schema>
 
@@ -319,11 +319,11 @@ def get_bill_structured_system_prompt() -> str:
 
 
 def get_bill_structured_user_prompt(num_pages: int) -> str:
-    """User instruction sent with one or two page images."""
+    """User instruction sent with one or more page images."""
     if num_pages >= 2:
         return (
             "Extract data from the following shipping documents. "
-            "IMAGE 1 is Page 1 (main B/L). IMAGE 2 is Page 2 (container annexure if present). "
+            "IMAGE 1 is Page 1 (main B/L). IMAGE 2 onward are container annexure/continuation pages if present. "
             "Return ONLY valid JSON matching the agreed schema — no markdown or commentary."
         )
     return (

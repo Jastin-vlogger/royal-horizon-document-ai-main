@@ -25,6 +25,7 @@ from src.utils.metadata_aggregator import aggregate_metadata
 router = APIRouter(prefix="/purchase-tracker", tags=["purchase-tracker"])
 
 ALLOWED_TYPES = {"pdf", "image"}
+BILL_FETCH_DETAILS_MAX_PAGES = 3
 
 
 @router.post(
@@ -35,7 +36,7 @@ ALLOWED_TYPES = {"pdf", "image"}
 async def extract_bill_no_from_document(
     file: UploadFile = File(
         ...,
-        description="Bill of Lading document: PDF (pages 1–2 used) or image (PNG/JPEG).",
+        description="Bill of Lading document: PDF (pages 1-3 used) or image (PNG/JPEG).",
     ),
     packaging_list_file: Optional[UploadFile] = File(
         None,
@@ -90,7 +91,11 @@ async def extract_bill_no_from_document(
         )
     
     try:
-        bill_page_images = load_bill_document_pages(bill_content, bill_filename)
+        bill_page_images = load_bill_document_pages(
+            bill_content,
+            bill_filename,
+            max_pages=BILL_FETCH_DETAILS_MAX_PAGES,
+        )
     except ValueError as e:
         logger.warning("Bill document pages unavailable: %s", e)
         raise HTTPException(

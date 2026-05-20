@@ -72,7 +72,7 @@ async def extract_bill_structured(
     Optional[BillOfLadingStructuredExtraction], ExtractionMetadata, Optional[str]
 ]:
     """
-    Run vision extraction on one or two page images (PNG), validate with Pydantic.
+    Run vision extraction on one or more page images (PNG), validate with Pydantic.
 
     Returns (extraction_or_none, metadata, parse_error_or_none).
     """
