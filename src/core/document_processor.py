@@ -120,13 +120,14 @@ def load_packaging_list_pages(content: bytes, filename: str) -> list[bytes]:
         try:
             info = pdfinfo_from_bytes(content)
             total_pages = info.get("Pages", 0)
-            if total_pages > 2:
-                raise ValueError(
-                    f"Packaging list PDF has {total_pages} pages, but maximum 2 pages allowed"
-                )
         except Exception:
             # If we can't get page info, proceed and let conversion handle it
-            pass
+            total_pages = 0
+
+        if total_pages > 2:
+            raise ValueError(
+                f"Packaging list PDF has {total_pages} pages, but maximum 2 pages allowed"
+            )
 
         pages = pdf_pages_to_png_images(content, first_page=1, last_page=2)
         if len(pages) > 2:

@@ -12,6 +12,7 @@ from src.core.document_processor import (
     is_pdf,
     load_bill_document_pages,
     load_image_bytes,
+    load_packaging_list_pages,
 )
 
 
@@ -85,3 +86,53 @@ def test_load_bill_document_pages_accepts_custom_pdf_limit(monkeypatch):
 
     assert pages == [b"page-1", b"page-2", b"page-3"]
     assert calls == {"first_page": 1, "last_page": 3}
+
+
+def test_load_packaging_list_pages_uses_first_two_pdf_pages(monkeypatch):
+    """Packaging list PDF loading sends pages 1-2 for extraction."""
+    calls = {}
+
+    def fake_pdfinfo_from_bytes(content):
+        calls["pdfinfo_content"] = content
+        return {"Pages": 2}
+
+    def fake_pdf_pages_to_png_images(content, first_page=1, last_page=2):
+        calls["content"] = content
+        calls["first_page"] = first_page
+        calls["last_page"] = last_page
+        return [b"page-1", b"page-2"]
+
+    monkeypatch.setattr(
+        document_processor,
+        "pdf_pages_to_png_images",
+        fake_pdf_pages_to_png_images,
+    )
+    monkeypatch.setattr(
+        "pdf2image.pdfinfo_from_bytes",
+        fake_pdfinfo_from_bytes,
+    )
+
+    pages = load_packaging_list_pages(b"pdf-bytes", "packing-list.pdf")
+
+    assert pages == [b"page-1", b"page-2"]
+    assert calls == {
+        "pdfinfo_content": b"pdf-bytes",
+        "content": b"pdf-bytes",
+        "first_page": 1,
+        "last_page": 2,
+    }
+
+
+def test_load_packaging_list_pages_rejects_more_than_two_pdf_pages(monkeypatch):
+    """Packaging list PDFs above two pages are rejected before extraction."""
+
+    def fake_pdfinfo_from_bytes(_content):
+        return {"Pages": 3}
+
+    monkeypatch.setattr(
+        "pdf2image.pdfinfo_from_bytes",
+        fake_pdfinfo_from_bytes,
+    )
+
+    with pytest.raises(ValueError, match="maximum 2 pages allowed"):
+        load_packaging_list_pages(b"pdf-bytes", "packing-list.pdf")
