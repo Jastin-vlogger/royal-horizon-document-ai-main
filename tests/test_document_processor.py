@@ -5,8 +5,8 @@ import io
 import pytest
 from PIL import Image
 
-import src.core.document_processor as document_processor
-from src.core.document_processor import (
+import src.brokers.document_render_broker as document_processor
+from src.brokers.document_render_broker import (
     detect_file_type,
     is_image,
     is_pdf,

@@ -1,22 +1,24 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-
-      {
-
-          "name": "Royal Horizon Document AI",
-          "type": "debugpy",
-          "request": "launch",
-          "program": "${workspaceFolder}/src/main.py",
-          "console": "integratedTerminal",
-          "env": {
-            "PYTHONPATH": "${workspaceFolder}"
-          },
-          "pythonPath": "/Users/zaheer/Library/Caches/pypoetry/virtualenvs/royal-horizon-document-ai-enGDO3Tv-py3.10/bin/python",
-          "justMyCode": true
-        }
+    {
+      "name": "Royal Horizon Document AI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "src.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload"
+      ],
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "justMyCode": true
+    }
   ]
 }

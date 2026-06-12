@@ -17,6 +17,7 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-dev --no-interaction --no-ansi
 
+COPY config ./config
 COPY src ./src
 
 ENV PORT=8000

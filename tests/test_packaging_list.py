@@ -2,11 +2,12 @@
 
 import pytest
 
-from src.schemas.packaging_list import PackagingListContainerInfo, PackagingListExtraction
-from src.schemas.response import BillOfLadingContainerRow
-from src.utils.container_matcher import (
+from src.models.api.packaging_list import PackagingListContainerInfo, PackagingListExtraction
+from src.models.api.response import BillOfLadingContainerRow
+from src.processing.shared.container_matcher import (
     _calculate_similarity,
     _normalize_container_number,
+    align_containers_to_packaging_list,
     filter_containers_by_packaging_list,
     find_matching_container,
 )
@@ -186,6 +187,45 @@ class TestContainerMatcher:
         )
 
         assert len(filtered) == 0
+
+    def test_align_containers_canonicalizes_and_fills_missing_rows(self):
+        """Packaging list drives final brand-specific container rows."""
+        bill_containers = [
+            BillOfLadingContainerRow(container_no="FTAU1888832", pkg_ct=1250),
+            BillOfLadingContainerRow(container_no="CAAU2699500", pkg_ct=1250),
+            BillOfLadingContainerRow(container_no="FTAU1957229", pkg_ct=1250),
+        ]
+        packaging_containers = [
+            PackagingListContainerInfo(
+                container_number="SEKHU1298465",
+                no_of_bags=1250,
+            ),
+            PackagingListContainerInfo(
+                container_number="FTAU1888832",
+                no_of_bags=1250,
+            ),
+            PackagingListContainerInfo(
+                container_number="CAAU2689500",
+                no_of_bags=1250,
+            ),
+            PackagingListContainerInfo(
+                container_number="FTIU1957229",
+                no_of_bags=1250,
+            ),
+        ]
+
+        aligned = align_containers_to_packaging_list(
+            bill_containers,
+            packaging_containers,
+        )
+
+        assert [c.container_no for c in aligned] == [
+            "SEKHU1298465",
+            "FTAU1888832",
+            "CAAU2689500",
+            "FTIU1957229",
+        ]
+        assert [c.pkg_ct for c in aligned] == [1250, 1250, 1250, 1250]
 
 
 class TestPackagingListSchemas:

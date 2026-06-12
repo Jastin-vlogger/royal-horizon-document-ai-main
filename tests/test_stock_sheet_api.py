@@ -4,8 +4,8 @@ import io
 
 from fastapi.testclient import TestClient
 
-from src.core.stock_sheet.constants import CANONICAL_COLUMNS
-from src.schemas.stock_sheet import (
+from src.processing.stock_sheet.constants import CANONICAL_COLUMNS
+from src.models.api.stock_sheet import (
     StockSheetData,
     StockSheetFileInfo,
     StockSheetMetadata,
@@ -27,13 +27,13 @@ def test_stock_sheet_invalid_file_returns_unified_invalid(client: TestClient):
 
 
 def test_stock_sheet_success_response_shape(client: TestClient, monkeypatch):
-    async def _fake_pipeline(content: bytes, filename: str) -> StockSheetResponse:
+    async def _fake_pipeline(self, file) -> StockSheetResponse:
         return StockSheetResponse(
             valid=True,
             status="processed",
             reason=None,
             file_info=StockSheetFileInfo(
-                filename=filename,
+                filename=file.filename,
                 file_type="image",
                 pages_detected=1,
                 pages_processed=1,
@@ -64,7 +64,7 @@ def test_stock_sheet_success_response_shape(client: TestClient, monkeypatch):
             ),
         )
 
-    monkeypatch.setattr("src.routes.stock_sheet.run_stock_sheet_pipeline", _fake_pipeline)
+    monkeypatch.setattr("src.dispatchers.document_workflow_dispatcher_impl.DocumentWorkflowDispatcher.stock_sheet_extract", _fake_pipeline)
     response = client.post(
         "/extract/stock-sheet",
         files={"file": ("sheet.png", io.BytesIO(b"fakepng"), "image/png")},
@@ -80,13 +80,13 @@ def test_stock_sheet_success_response_shape(client: TestClient, monkeypatch):
 
 
 def test_stock_sheet_pdf_threshold_returns_invalid(client: TestClient, monkeypatch):
-    async def _fake_pipeline(content: bytes, filename: str) -> StockSheetResponse:
+    async def _fake_pipeline(self, file) -> StockSheetResponse:
         return StockSheetResponse(
             valid=False,
             status="invalid",
             reason="PDF has 5 pages; max allowed is 3.",
             file_info=StockSheetFileInfo(
-                filename=filename,
+                filename=file.filename,
                 file_type="pdf",
                 pages_detected=5,
                 pages_processed=0,
@@ -95,7 +95,7 @@ def test_stock_sheet_pdf_threshold_returns_invalid(client: TestClient, monkeypat
             metadata=StockSheetMetadata(model="gpt-4o"),
         )
 
-    monkeypatch.setattr("src.routes.stock_sheet.run_stock_sheet_pipeline", _fake_pipeline)
+    monkeypatch.setattr("src.dispatchers.document_workflow_dispatcher_impl.DocumentWorkflowDispatcher.stock_sheet_extract", _fake_pipeline)
     response = client.post(
         "/extract/stock-sheet",
         files={"file": ("sheet.pdf", io.BytesIO(b"%PDF-1.4 mock"), "application/pdf")},

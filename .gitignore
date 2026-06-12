@@ -213,4 +213,3 @@ poetry.lock
 prompts.py
 .cursor
 experiments
-docs/*

@@ -4,47 +4,34 @@ import io
 
 from fastapi.testclient import TestClient
 
-from src.schemas.response import BillOfLadingStructuredExtraction, ExtractionMetadata
+from src.models.api.response import ExtractionMetadata
+from src.models.llm.invocation import LLMInvocationResult
 
 
 def test_fetch_details_loads_three_bill_pages(client: TestClient, monkeypatch):
     """The fetch-details endpoint requests three B/L pages for PDFs."""
-    import src.routes.purchase_tracker as purchase_tracker
 
     calls = {}
 
-    def fake_load_bill_document_pages(content, filename, max_pages=2):
-        calls["filename"] = filename
+    def fake_limited_pages_png(self, document, max_pages):
+        calls["filename"] = document.filename
         calls["max_pages"] = max_pages
         return [b"page-1", b"page-2", b"page-3"]
 
-    async def fake_extract_bill_structured(page_images):
-        calls["page_count"] = len(page_images)
-        extraction = BillOfLadingStructuredExtraction(
-            bl_number="AKI0630692",
-            shipped_on_board_date="2026-05-02",
-            port_of_loading="KARACHI-PAKISTAN",
-            port_of_discharge="KHOR AL FAKKAN",
-            number_of_containers=0,
-            number_of_bags=0,
-            quantity_mt=0.0,
-            shipping_line="CMA CGM",
-            freight_prepaid=False,
-            vessel_name="LILA MUMBAI / 0TO3XW1MA",
-            invoice_number="MRRM-2026-609",
-            containers=[],
+    async def fake_vision(self, *, system_prompt, image_bytes_list, user_prompt):
+        calls["page_count"] = len(image_bytes_list)
+        return LLMInvocationResult(
+            content='{"bl_number": "AKI0630692", "containers": []}',
+            metadata=ExtractionMetadata(model="gpt-4o"),
         )
-        return extraction, ExtractionMetadata(), None
 
     monkeypatch.setattr(
-        purchase_tracker,
-        "load_bill_document_pages",
-        fake_load_bill_document_pages,
+        "src.foundation.document_foundation_impl.DocumentFoundation.limited_pages_png",
+        fake_limited_pages_png,
     )
     monkeypatch.setattr(
-        purchase_tracker,
-        "extract_bill_structured",
-        fake_extract_bill_structured,
+        "src.foundation.llm_foundation_impl.LLMFoundation.vision",
+        fake_vision,
     )
 
     response = client.post(

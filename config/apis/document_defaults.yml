@@ -1,0 +1,15 @@
+allowed_file_types:
+  - pdf
+  - image
+shipment_form:
+  default_inco_terms:
+    - CIF
+    - FOB
+    - EXWORKS
+    - C&F
+purchase_tracker:
+  bill_fetch_details_max_pages: 3
+  packaging_list_max_pages: 2
+stock_sheet:
+  pdf_max_pages: 3
+  cleaner_batch_size: 60

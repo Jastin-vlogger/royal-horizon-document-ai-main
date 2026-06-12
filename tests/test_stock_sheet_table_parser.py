@@ -1,8 +1,8 @@
 """Tests for stock-sheet table parsing helpers."""
 
-from src.core.stock_sheet.constants import CANONICAL_COLUMNS
-from src.core.stock_sheet.table_parser import map_rows_to_canonical, parse_stock_table
-from src.core.stock_sheet.total_row import repair_total_row_from_tables
+from src.processing.stock_sheet.constants import CANONICAL_COLUMNS
+from src.processing.stock_sheet.table_parser import map_rows_to_canonical, parse_stock_table
+from src.processing.stock_sheet.total_row import repair_total_row_from_tables
 
 
 def test_parse_stock_table_merges_tables_and_slices_stock_columns():

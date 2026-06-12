@@ -1,6 +1,6 @@
 """Tests for cost calculator."""
 
-from src.utils.cost_calculator import calculate_cost, get_pricing_table
+from src.processing.shared.cost_calculator import calculate_cost, get_pricing_table
 
 
 def test_get_pricing_table():

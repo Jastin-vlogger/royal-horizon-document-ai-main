@@ -2,12 +2,12 @@
 
 import pytest
 
-from src.core.lpo_invoice_business_logics import (
+from src.processing.extractions import (
     canonical_buying_unit_from_uom,
     normalize_inco_terms_to_allowed,
     normalize_payment_terms,
 )
-from src.core.shipment_calculations import (
+from src.processing.shipment.shipment_calculations import (
     calculate_shipment_logistics,
     parse_currency_value,
     parse_packaging_kg,
