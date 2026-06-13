@@ -68,6 +68,12 @@ class DocumentWorkflowDispatcher:
             SingleDocumentCommand(document=document)
         )
 
+    async def boe_extract(self, file: UploadFile):
+        document = await self._document_from_upload(file, label="A file")
+        return await self._coordinator.boe_extract(
+            SingleDocumentCommand(document=document)
+        )
+
     async def shipment_form(
         self,
         *,

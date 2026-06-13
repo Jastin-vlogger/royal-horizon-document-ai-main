@@ -13,3 +13,5 @@ purchase_tracker:
 stock_sheet:
   pdf_max_pages: 3
   cleaner_batch_size: 60
+boe:
+  pdf_max_pages: 2

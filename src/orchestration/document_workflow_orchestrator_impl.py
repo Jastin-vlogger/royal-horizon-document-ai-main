@@ -17,6 +17,7 @@ from src.foundation.ocr_foundation_impl import OCRFoundation
 from src.foundation.prompt_foundation_impl import PromptFoundation
 from src.models.api.arrival_notice import ArrivalNoticeExtractResponse
 from src.models.api.bank_advice_is_signed import BankAdviceIsSignedResponse
+from src.models.api.boe import BoeExtractResponse
 from src.models.api.costsheet_is_signed import CostSheetIsSignedResponse
 from src.models.api.response import (
     EnhancedBillNoExtractionResponse,
@@ -52,6 +53,7 @@ from src.processing.extractions import (
     parse_tax_invoice_response,
     sanitize_cleaned_rows,
 )
+from src.processing.boe import build_boe_vision_images, parse_boe_response
 from src.processing.shared.container_matcher import align_containers_to_packaging_list
 from src.processing.shared.metadata_aggregator import aggregate_metadata
 from src.processing.shipment.shipment_calculations import calculate_shipment_logistics
@@ -138,6 +140,18 @@ class DocumentWorkflowOrchestrator:
             raise ConfigurationError(message)
         return value.strip()
 
+    def _require_positive_api_int(self, key: str) -> int:
+        value = self._prompts.api_config(key)
+        if value is None:
+            raise ConfigurationError(f"{key} is not configured")
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ConfigurationError(f"{key} must be an integer") from exc
+        if parsed < 1:
+            raise ConfigurationError(f"{key} must be at least 1")
+        return parsed
+
     async def _first_page_png(self, document: DocumentInput, *, label: str) -> bytes:
         self._validate_type(document, label=label)
         try:
@@ -222,6 +236,56 @@ class DocumentWorkflowOrchestrator:
         )
         try:
             return parse_arrival_notice_response(result.content, result.metadata)
+        except ValueError as exc:
+            raise LLMOutputError(str(exc)) from exc
+
+    async def boe_extract(
+        self,
+        command: SingleDocumentCommand,
+    ) -> BoeExtractResponse:
+        file_type = self._validate_type(command.document, label="File")
+        max_pages = self._require_positive_api_int("boe.pdf_max_pages")
+
+        try:
+            if file_type == "pdf":
+                pages_detected = await asyncio.to_thread(
+                    self._documents.pdf_page_count,
+                    command.document,
+                )
+                if pages_detected > max_pages:
+                    raise DomainValidationError("PDF exceeds maximum allowed pages")
+                pages = await asyncio.to_thread(
+                    self._documents.limited_pages_png,
+                    command.document,
+                    max_pages,
+                )
+            else:
+                pages = [
+                    await asyncio.to_thread(
+                        self._documents.first_page_png,
+                        command.document,
+                    )
+                ]
+        except DomainValidationError:
+            raise
+        except Exception as exc:
+            raise DomainValidationError(f"Could not read document: {exc}") from exc
+
+        system_prompt = self._require_prompt(
+            self._prompts.prompt("boe", "system_prompt"),
+            "boe system prompt is empty",
+        )
+        user_prompt = self._require_prompt(
+            self._prompts.prompt("boe", "user_prompt"),
+            "boe user prompt is empty",
+        )
+        result = await self._llm.vision(
+            system_prompt=system_prompt,
+            image_bytes_list=build_boe_vision_images(pages),
+            user_prompt=user_prompt,
+        )
+        try:
+            return parse_boe_response(result.content, result.metadata)
         except ValueError as exc:
             raise LLMOutputError(str(exc)) from exc
 

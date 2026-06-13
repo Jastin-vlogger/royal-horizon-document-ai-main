@@ -4,6 +4,7 @@ from typing import Protocol
 
 from src.models.api.arrival_notice import ArrivalNoticeExtractResponse
 from src.models.api.bank_advice_is_signed import BankAdviceIsSignedResponse
+from src.models.api.boe import BoeExtractResponse
 from src.models.api.costsheet_is_signed import CostSheetIsSignedResponse
 from src.models.api.response import EnhancedBillNoExtractionResponse, ShipmentFormResponse
 from src.models.api.stock_sheet import StockSheetResponse
@@ -41,6 +42,12 @@ class DocumentWorkflowOrchestratorInterface(Protocol):
         command: SingleDocumentCommand,
     ) -> ArrivalNoticeExtractResponse:
         """Run arrival notice extraction."""
+
+    async def boe_extract(
+        self,
+        command: SingleDocumentCommand,
+    ) -> BoeExtractResponse:
+        """Run BOE extraction."""
 
     async def shipment_form(
         self,

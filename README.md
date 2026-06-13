@@ -36,6 +36,7 @@ Detailed endpoint documentation lives under `docs/{api_endpoint_name}/api_docs.m
 | Shipment Form | `POST /shipment-form` | [docs/shipment-form/api_docs.md](docs/shipment-form/api_docs.md) |
 | Arrival Notice Extract | `POST /arrival-notice/extract` | [docs/arrival-notice-extract/api_docs.md](docs/arrival-notice-extract/api_docs.md) |
 | Bank Advice Is Signed | `POST /bank-advice-doc/is-signed` | [docs/bank-advice-is-signed/api_docs.md](docs/bank-advice-is-signed/api_docs.md) |
+| BOE Extract | `POST /boe/extract` | [docs/boe-extract/api_docs.md](docs/boe-extract/api_docs.md) |
 | Costsheet Is Signed | `POST /costsheet/is-signed` | [docs/costsheet-is-signed/api_docs.md](docs/costsheet-is-signed/api_docs.md) |
 | Purchase Tracker Fetch Details | `POST /purchase-tracker/fetch-details` | [docs/purchase-tracker-fetch-details/api_docs.md](docs/purchase-tracker-fetch-details/api_docs.md) |
 | Stock Sheet Extract | `POST /extract/stock-sheet` | [docs/stock-sheet-extract/api_docs.md](docs/stock-sheet-extract/api_docs.md) |

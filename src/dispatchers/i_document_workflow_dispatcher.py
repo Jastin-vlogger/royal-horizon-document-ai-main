@@ -20,6 +20,9 @@ class DocumentWorkflowDispatcherInterface(Protocol):
     async def arrival_notice_extract(self, file: UploadFile):
         """Dispatch arrival notice extraction."""
 
+    async def boe_extract(self, file: UploadFile):
+        """Dispatch BOE extraction."""
+
     async def shipment_form(
         self,
         *,
