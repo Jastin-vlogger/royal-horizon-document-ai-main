@@ -19,6 +19,7 @@ from src.models.api.arrival_notice import ArrivalNoticeExtractResponse
 from src.models.api.bank_advice_is_signed import BankAdviceIsSignedResponse
 from src.models.api.boe import BoeExtractResponse
 from src.models.api.costsheet_is_signed import CostSheetIsSignedResponse
+from src.models.api.dpw_cargo import DpwCargoExtractorResponse
 from src.models.api.response import (
     EnhancedBillNoExtractionResponse,
     ExtractionMetadata,
@@ -54,6 +55,10 @@ from src.processing.extractions import (
     sanitize_cleaned_rows,
 )
 from src.processing.boe import build_boe_vision_images, parse_boe_response
+from src.processing.dpw_cargo import (
+    build_dpw_cargo_vision_images,
+    parse_dpw_cargo_response,
+)
 from src.processing.shared.container_matcher import align_containers_to_packaging_list
 from src.processing.shared.metadata_aggregator import aggregate_metadata
 from src.processing.shipment.shipment_calculations import calculate_shipment_logistics
@@ -286,6 +291,56 @@ class DocumentWorkflowOrchestrator:
         )
         try:
             return parse_boe_response(result.content, result.metadata)
+        except ValueError as exc:
+            raise LLMOutputError(str(exc)) from exc
+
+    async def dpw_cargo_extract(
+        self,
+        command: SingleDocumentCommand,
+    ) -> DpwCargoExtractorResponse:
+        file_type = self._documents.file_type(command.document)
+        if file_type != "pdf":
+            raise DomainValidationError(
+                f"File must be a PDF. Got: {command.document.filename}"
+            )
+        max_pages = self._require_positive_api_int("dpw_cargo.pdf_max_pages")
+
+        try:
+            pages_detected = await asyncio.to_thread(
+                self._documents.pdf_page_count,
+                command.document,
+            )
+            if pages_detected > max_pages:
+                raise DomainValidationError("PDF exceeds maximum allowed pages")
+            pages = await asyncio.to_thread(
+                self._documents.limited_pages_png,
+                command.document,
+                max_pages,
+            )
+        except DomainValidationError:
+            raise
+        except Exception as exc:
+            raise DomainValidationError(f"Could not read document: {exc}") from exc
+
+        system_prompt = self._require_prompt(
+            self._prompts.prompt("dpw_cargo", "system_prompt"),
+            "dpw_cargo system prompt is empty",
+        )
+        user_prompt = self._require_prompt(
+            self._prompts.prompt("dpw_cargo", "user_prompt"),
+            "dpw_cargo user prompt is empty",
+        )
+        result = await self._llm.vision(
+            system_prompt=system_prompt,
+            image_bytes_list=build_dpw_cargo_vision_images(pages),
+            user_prompt=user_prompt,
+        )
+        try:
+            return parse_dpw_cargo_response(
+                result.content,
+                result.metadata,
+                pages_processed=len(pages),
+            )
         except ValueError as exc:
             raise LLMOutputError(str(exc)) from exc
 

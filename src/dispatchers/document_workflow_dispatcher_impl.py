@@ -74,6 +74,12 @@ class DocumentWorkflowDispatcher:
             SingleDocumentCommand(document=document)
         )
 
+    async def dpw_cargo_extract(self, file: UploadFile):
+        document = await self._document_from_upload(file, label="A file")
+        return await self._coordinator.dpw_cargo_extract(
+            SingleDocumentCommand(document=document)
+        )
+
     async def shipment_form(
         self,
         *,

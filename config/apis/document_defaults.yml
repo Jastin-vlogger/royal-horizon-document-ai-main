@@ -15,3 +15,5 @@ stock_sheet:
   cleaner_batch_size: 60
 boe:
   pdf_max_pages: 2
+dpw_cargo:
+  pdf_max_pages: 10

@@ -11,6 +11,7 @@ from src.routers.arrival_notice import router as arrival_notice_router
 from src.routers.bank_advice import router as bank_advice_router
 from src.routers.boe import router as boe_router
 from src.routers.costsheet import router as costsheet_router
+from src.routers.dpw_cargo import router as dpw_cargo_router
 from src.routers.purchase_tracker import router as purchase_tracker_router
 from src.routers.shipment import router as shipment_router
 from src.routers.stock_sheet import router as stock_sheet_router
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(bank_advice_router)
     app.include_router(boe_router)
     app.include_router(costsheet_router)
+    app.include_router(dpw_cargo_router)
     app.include_router(purchase_tracker_router)
     app.include_router(stock_sheet_router)
     app.include_router(tax_invoice_router)

@@ -34,6 +34,9 @@ class DocumentWorkflowCoordinator:
     async def boe_extract(self, command: SingleDocumentCommand):
         return await self._orchestrator.boe_extract(command)
 
+    async def dpw_cargo_extract(self, command: SingleDocumentCommand):
+        return await self._orchestrator.dpw_cargo_extract(command)
+
     async def shipment_form(self, command: ShipmentFormCommand):
         return await self._orchestrator.shipment_form(command)
 

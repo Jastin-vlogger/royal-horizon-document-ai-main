@@ -23,6 +23,9 @@ class DocumentWorkflowDispatcherInterface(Protocol):
     async def boe_extract(self, file: UploadFile):
         """Dispatch BOE extraction."""
 
+    async def dpw_cargo_extract(self, file: UploadFile):
+        """Dispatch DPW cargo receipt extraction."""
+
     async def shipment_form(
         self,
         *,

@@ -6,6 +6,7 @@ from src.models.api.arrival_notice import ArrivalNoticeExtractResponse
 from src.models.api.bank_advice_is_signed import BankAdviceIsSignedResponse
 from src.models.api.boe import BoeExtractResponse
 from src.models.api.costsheet_is_signed import CostSheetIsSignedResponse
+from src.models.api.dpw_cargo import DpwCargoExtractorResponse
 from src.models.api.response import EnhancedBillNoExtractionResponse, ShipmentFormResponse
 from src.models.api.stock_sheet import StockSheetResponse
 from src.models.api.tax_invoice import TaxInvoiceExtractionResponse
@@ -48,6 +49,12 @@ class DocumentWorkflowOrchestratorInterface(Protocol):
         command: SingleDocumentCommand,
     ) -> BoeExtractResponse:
         """Run BOE extraction."""
+
+    async def dpw_cargo_extract(
+        self,
+        command: SingleDocumentCommand,
+    ) -> DpwCargoExtractorResponse:
+        """Run DPW cargo receipt extraction."""
 
     async def shipment_form(
         self,
