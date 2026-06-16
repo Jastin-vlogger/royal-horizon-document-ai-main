@@ -36,7 +36,11 @@ def test_dpw_cargo_extractor_success_response_shape(
         return LLMInvocationResult(
             content=(
                 '{"date": "08/06/2026 13:30", '
-                '"containers": ["Container DPWU200491", "MSKU1234567", "DPWU200491"], '
+                '"containers": ['
+                '{"container": "Container DPWU200491", "from": "29/05/2026", "to": "11/06/2026"}, '
+                '{"container": "MSKU1234567", "from": "2026-06-15", "to": "2026-06-16"}, '
+                '{"container": "DPWU200491", "from": "30/05/2026", "to": "12/06/2026"}'
+                '], '
                 '"receipt_no": "Receipt No : 56710421"}'
             ),
             metadata=ExtractionMetadata(total_tokens=42, model="gpt-4o"),
@@ -64,7 +68,18 @@ def test_dpw_cargo_extractor_success_response_shape(
     body = response.json()
     assert body == {
         "date": "08/06/2026",
-        "containers": ["DPWU200491", "MSKU1234567"],
+        "containers": [
+            {
+                "container": "DPWU200491",
+                "from": "29/05/2026",
+                "to": "11/06/2026",
+            },
+            {
+                "container": "MSKU1234567",
+                "from": "15/06/2026",
+                "to": "16/06/2026",
+            },
+        ],
         "total_containers": 2,
         "pages_processed": 2,
         "receipt_no": "56710421",

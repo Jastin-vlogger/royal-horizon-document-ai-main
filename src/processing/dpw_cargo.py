@@ -9,16 +9,30 @@ from typing import Any, Iterable, Optional
 from PIL import Image
 from pydantic import ValidationError
 
-from src.models.api.dpw_cargo import DpwCargoExtractorResponse, DpwCargoLLMOutput
+from src.models.api.dpw_cargo import (
+    DpwCargoContainer,
+    DpwCargoContainerLLMOutput,
+    DpwCargoExtractorResponse,
+    DpwCargoLLMOutput,
+)
 from src.models.api.response import ExtractionMetadata
 
 _CONTAINER_LABEL_RE = re.compile(r"^.*?\bcontainer\b\s*:?", re.IGNORECASE)
 _CONTAINER_SHAPED_RE = re.compile(
-    r"(?<![A-Za-z0-9])([A-Za-z]{4}(?:[\s-]*\d){6,7})(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])([A-Za-z]{4}[\s-]*\d{6,7})(?![A-Za-z0-9])"
+)
+_CONTAINER_BLOCK_RE = re.compile(
+    r"\bcontainer\s+([A-Za-z]{4}[\s-]*\d{6,7})(.*?)(?=\bcontainer\s+[A-Za-z]{4}[\s-]*\d{6,7}|$)",
+    re.IGNORECASE | re.DOTALL,
 )
 _CONTAINER_COMPACT_RE = re.compile(r"^[A-Z]{4}\d{6,7}$")
 _DATE_DMY_RE = re.compile(r"(?<!\d)(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?!\d)")
 _DATE_ISO_RE = re.compile(r"(?<!\d)(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?!\d)")
+_DATE_VALUE_RE = r"(?:\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})"
+_DATE_RANGE_RE = re.compile(
+    rf"\bfrom\s+({_DATE_VALUE_RE})\s+to\s+({_DATE_VALUE_RE})",
+    re.IGNORECASE,
+)
 _RECEIPT_LABEL_RE = re.compile(
     r"^(?:receipt\s*(?:no|number)?|bol\s*no|b/l\s*no|bl\s*no)\s*:?",
     re.IGNORECASE,
@@ -69,29 +83,40 @@ def _container_candidates_from_text(value: str) -> list[str]:
     return candidates
 
 
+def _first_container_from_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    candidates = _container_candidates_from_text(str(value))
+    return candidates[0] if candidates else None
+
+
+def _date_range_from_text(value: str) -> tuple[Optional[str], Optional[str]]:
+    match = _DATE_RANGE_RE.search(value)
+    if not match:
+        return None, None
+    return match.group(1), match.group(2)
+
+
+def _container_items_from_text(
+    value: str,
+) -> list[tuple[str, Optional[str], Optional[str]]]:
+    items: list[tuple[str, Optional[str], Optional[str]]] = []
+    for match in _CONTAINER_BLOCK_RE.finditer(value):
+        container = _clean_container_token(match.group(1))
+        if not container:
+            continue
+        from_value, to_value = _date_range_from_text(match.group(2))
+        items.append((container, from_value, to_value))
+    return items
+
+
 def normalize_dpw_container_values(value: Any) -> list[str]:
     """Return unique DPW container references in first-seen order."""
 
-    if value is None:
-        return []
-    raw_values: Iterable[Any]
-    if isinstance(value, list):
-        raw_values = value
-    elif isinstance(value, tuple):
-        raw_values = value
-    else:
-        raw_values = [value]
-
-    seen: set[str] = set()
     containers: list[str] = []
-    for raw_value in raw_values:
-        if raw_value is None:
-            continue
-        for candidate in _container_candidates_from_text(str(raw_value)):
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            containers.append(candidate)
+    for item in normalize_dpw_container_items(value):
+        if item.container is not None:
+            containers.append(item.container)
     return containers
 
 
@@ -103,12 +128,12 @@ def _format_date(year: int, month: int, day: int) -> Optional[str]:
     return parsed.strftime("%d/%m/%Y")
 
 
-def normalize_dpw_date(value: Optional[str]) -> Optional[str]:
+def normalize_dpw_date(value: Any) -> Optional[str]:
     """Normalize receipt date values to DD/MM/YYYY."""
 
     if value is None:
         return None
-    text = value.strip()
+    text = str(value).strip()
     if not text or text.lower() == "null":
         return None
 
@@ -146,6 +171,82 @@ def normalize_receipt_no(value: Optional[str]) -> Optional[str]:
     return compact or None
 
 
+def normalize_dpw_container_items(value: Any) -> list[DpwCargoContainer]:
+    """Return unique DPW container rows with normalized storage date ranges."""
+
+    if value is None:
+        return []
+    raw_values: Iterable[Any]
+    if isinstance(value, list):
+        raw_values = value
+    elif isinstance(value, tuple):
+        raw_values = value
+    else:
+        raw_values = [value]
+
+    containers: list[DpwCargoContainer] = []
+    index_by_container: dict[str, int] = {}
+
+    def add_item(
+        container_value: Optional[str],
+        from_value: Any = None,
+        to_value: Any = None,
+    ) -> None:
+        container = _first_container_from_value(container_value)
+        if not container:
+            return
+        from_date = normalize_dpw_date(from_value)
+        to_date = normalize_dpw_date(to_value)
+        if container in index_by_container:
+            existing = containers[index_by_container[container]]
+            if existing.from_date is None and from_date is not None:
+                existing.from_date = from_date
+            if existing.to_date is None and to_date is not None:
+                existing.to_date = to_date
+            return
+        index_by_container[container] = len(containers)
+        containers.append(
+            DpwCargoContainer(
+                container=container,
+                from_date=from_date,
+                to_date=to_date,
+            )
+        )
+
+    for raw_value in raw_values:
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, DpwCargoContainerLLMOutput):
+            add_item(raw_value.container, raw_value.from_date, raw_value.to_date)
+            continue
+        if isinstance(raw_value, dict):
+            add_item(
+                raw_value.get("container")
+                or raw_value.get("container_no")
+                or raw_value.get("container_number"),
+                raw_value.get("from")
+                or raw_value.get("from_date")
+                or raw_value.get("start_date")
+                or raw_value.get("date_from"),
+                raw_value.get("to")
+                or raw_value.get("to_date")
+                or raw_value.get("end_date")
+                or raw_value.get("date_to"),
+            )
+            continue
+
+        text = str(raw_value)
+        text_items = _container_items_from_text(text)
+        if text_items:
+            for container, from_value, to_value in text_items:
+                add_item(container, from_value, to_value)
+            continue
+        for candidate in _container_candidates_from_text(text):
+            add_item(candidate)
+
+    return containers
+
+
 def parse_dpw_cargo_response(
     content: str,
     metadata: ExtractionMetadata,
@@ -167,7 +268,7 @@ def parse_dpw_cargo_response(
     except ValidationError as exc:
         raise ValueError(f"LLM JSON failed schema validation: {exc}") from exc
 
-    containers = normalize_dpw_container_values(parsed.containers)
+    containers = normalize_dpw_container_items(parsed.containers)
     return DpwCargoExtractorResponse(
         date=normalize_dpw_date(parsed.date),
         containers=containers,

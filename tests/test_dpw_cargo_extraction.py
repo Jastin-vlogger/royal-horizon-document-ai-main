@@ -8,6 +8,7 @@ from PIL import Image
 from src.models.api.response import ExtractionMetadata
 from src.processing.dpw_cargo import (
     build_dpw_cargo_vision_images,
+    normalize_dpw_container_items,
     normalize_dpw_container_values,
     normalize_dpw_date,
     normalize_receipt_no,
@@ -39,6 +40,29 @@ def test_normalize_dpw_container_values_deduplicates_and_accepts_dpw_shape():
 def test_normalize_dpw_container_values_returns_empty_for_missing_values():
     assert normalize_dpw_container_values(None) == []
     assert normalize_dpw_container_values("Container") == []
+
+
+def test_normalize_dpw_container_items_keeps_from_to_dates_and_deduplicates():
+    containers = normalize_dpw_container_items(
+        [
+            {
+                "container": "Container DPWU200491",
+                "from": "29/05/2026",
+                "to": "11/06/2026",
+            },
+            {
+                "container": "DPWU 200491",
+                "from": "30/05/2026",
+                "to": "12/06/2026",
+            },
+            "Container BSIU314828\n20' from 24/05/2026 to 08/06/2026",
+        ]
+    )
+
+    assert [item.model_dump(by_alias=True) for item in containers] == [
+        {"container": "DPWU200491", "from": "29/05/2026", "to": "11/06/2026"},
+        {"container": "BSIU314828", "from": "24/05/2026", "to": "08/06/2026"},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -76,7 +100,11 @@ def test_parse_dpw_cargo_response_normalizes_model_payload():
         ```json
         {
           "date": "08/06/2026 13:30",
-          "containers": "Container DPWU200491\\nContainer DPWU200491\\nContainer MSKU1234567",
+          "containers": [
+            {"container": "Container DPWU200491", "from": "29/05/2026", "to": "11/06/2026"},
+            {"container": "Container DPWU200491", "from": "29/05/2026", "to": "11/06/2026"},
+            {"container": "Container MSKU1234567", "from": "2026-06-15", "to": "2026-06-16"}
+          ],
           "receipt_no": "Receipt No : 56710421"
         }
         ```
@@ -86,7 +114,11 @@ def test_parse_dpw_cargo_response_normalizes_model_payload():
     )
 
     assert response.date == "08/06/2026"
-    assert response.containers == ["DPWU200491", "MSKU1234567"]
+    assert response.containers is not None
+    assert [item.model_dump(by_alias=True) for item in response.containers] == [
+        {"container": "DPWU200491", "from": "29/05/2026", "to": "11/06/2026"},
+        {"container": "MSKU1234567", "from": "15/06/2026", "to": "16/06/2026"},
+    ]
     assert response.total_containers == 2
     assert response.pages_processed == 6
     assert response.receipt_no == "56710421"

@@ -10,7 +10,7 @@ system_prompt: |-
       Extract exactly three fields:
       1. "date" from the receipt header Date field
       2. "receipt_no" from the receipt header Receipt No field, or BOL No/B/L No if that is the receipt reference visible in the document
-      3. "containers" from all visible charge rows labelled "Container"
+      3. "containers" from all visible charge rows labelled "Container", including the storage "from" and "to" dates for each container
     </task>
 
     <field name="date">
@@ -41,16 +41,19 @@ system_prompt: |-
     </field>
 
     <field name="containers">
-      <type>array of strings</type>
+      <type>array of objects</type>
       <location_rules>
         - Extract every visible container value directly after a "Container" label in the charge description rows.
+        - For each container, extract the date range from the closest following storage charge line, usually formatted like "20' from 24/05/2026 to 08/06/2026".
+        - The storage charge line may appear directly below the container label or at the top of the next page when the row crosses a page break.
         - Container rows can continue across multiple pages, and each page may contain several container labels.
         - Do not extract words from "CONTAINERS TaxCode" or other charge descriptions unless a specific container value is visible.
       </location_rules>
       <normalization_rules>
-        - Trim whitespace and remove spaces inside a container value.
-        - Return uppercase values.
-        - Remove duplicates while preserving first-seen document order.
+        - For "container", trim whitespace, remove spaces inside the value, and return uppercase.
+        - For "from" and "to", return dates in DD/MM/YYYY format.
+        - If a container is visible but its storage date range is absent or unreadable, set "from" and "to" to null.
+        - Remove duplicate container objects while preserving first-seen document order.
         - Valid DPW receipt container references are four letters followed by six or seven digits.
         - Do not invent a missing check digit or change ambiguous characters.
         - If no valid containers are visible, return an empty array.
@@ -62,6 +65,7 @@ system_prompt: |-
       <rule>Do not include markdown fences, commentary, notes, confidence, or extra keys.</rule>
       <rule>The JSON must contain exactly the keys "date", "containers", and "receipt_no".</rule>
       <rule>"containers" must always be an array. Use [] when no values are found.</rule>
+      <rule>Each "containers" item must contain exactly "container", "from", and "to".</rule>
       <rule>"date" must be a DD/MM/YYYY string or null.</rule>
       <rule>"receipt_no" must be a string or null.</rule>
     </output_rules>
@@ -69,13 +73,20 @@ system_prompt: |-
     <output_schema>
       {
         "date": "DD/MM/YYYY" | null,
-        "containers": ["string"],
+        "containers": [
+          {
+            "container": "string",
+            "from": "DD/MM/YYYY" | null,
+            "to": "DD/MM/YYYY" | null
+          }
+        ],
         "receipt_no": "string" | null
       }
     </output_schema>
   </system>
 user_prompt: |-
-  Extract the receipt date, receipt number, and all container references from
-  these DP World cargo receipt images. Some images may be cropped header or
-  charge-description regions from the same PDF pages to reduce processing cost.
-  Return only the JSON object matching the schema.
+  Extract the receipt date, receipt number, and all container references with
+  their storage from/to date ranges from these DP World cargo receipt images.
+  Some images may be cropped header or charge-description regions from the same
+  PDF pages to reduce processing cost. Return only the JSON object matching the
+  schema.

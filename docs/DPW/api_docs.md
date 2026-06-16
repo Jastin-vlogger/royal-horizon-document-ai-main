@@ -1,6 +1,6 @@
 # DPW Cargo Extractor API
 
-Extracts receipt date, receipt number, and container references from a DP World cargo receipt PDF.
+Extracts receipt date, receipt number, container references, and per-container storage date ranges from a DP World cargo receipt PDF.
 
 ## V1_REQUIREMENT
 
@@ -10,7 +10,7 @@ Extracts receipt date, receipt number, and container references from a DP World 
 - Default configured PDF page limit is `10`.
 - Use the dedicated `config/prompts/dpw_cargo.yml` prompt.
 - Render valid PDF pages once and send optimized header/container crops in one vision call.
-- Return a flat response containing extracted fields, LLM metadata, and `error`.
+- Return a flat response containing extracted fields, per-container date ranges, LLM metadata, and `error`.
 - On errors, keep all extraction fields and metadata as `null`, and populate `error`.
 
 ## Endpoint
@@ -22,7 +22,7 @@ POST `/dpw-cargo-extractor`
 This endpoint reads DPW cargo receipt PDFs and extracts:
 
 - `date`: receipt header `Date`, normalized to `DD/MM/YYYY`.
-- `containers`: all valid container values shown after `Container` labels in charge rows.
+- `containers`: all valid container values shown after `Container` labels in charge rows, with their storage `from` and `to` dates.
 - `receipt_no`: receipt header `Receipt No`, or visible BOL/B/L reference if used as the receipt reference.
 - `total_containers`: count of unique normalized containers.
 - `pages_processed`: number of rendered PDF pages actually processed.
@@ -51,7 +51,7 @@ The workflow does not infer missing values. If a field is absent or unreadable, 
 6. Processing builds compact header and charge-description crops to reduce vision payload size.
 7. Prompt foundation loads `dpw_cargo.yml`.
 8. LLM foundation runs one multi-image vision extraction call.
-9. Processing parses strict JSON, normalizes date/receipt/container values, removes duplicate containers, and sets `pages_processed`.
+9. Processing parses strict JSON, normalizes date/receipt/container/date-range values, removes duplicate containers, and sets `pages_processed`.
 10. Router returns the flat DPW response or a contract-shaped error body.
 
 ```mermaid
@@ -64,7 +64,7 @@ flowchart TD
     F --> G["Processing: header and container crops"]
     G --> H["Prompt Foundation: dpw_cargo.yml"]
     H --> I["LLM Foundation: vision call"]
-    I --> J["Processing: parse, normalize, dedupe"]
+    I --> J["Processing: parse, normalize dates, dedupe"]
     J --> K["DpwCargoExtractorResponse"]
 ```
 
@@ -81,7 +81,13 @@ file: binary PDF file, required
 ```json
 {
   "date": "DD/MM/YYYY|null",
-  "containers": ["string"],
+  "containers": [
+    {
+      "container": "string",
+      "from": "DD/MM/YYYY|null",
+      "to": "DD/MM/YYYY|null"
+    }
+  ],
   "total_containers": 0,
   "pages_processed": 0,
   "receipt_no": "string|null",
@@ -114,9 +120,21 @@ curl -X 'POST' \
 {
   "date": "08/06/2026",
   "containers": [
-    "BSIU314828",
-    "DPWU200491",
-    "DPWU201512"
+    {
+      "container": "BSIU314828",
+      "from": "24/05/2026",
+      "to": "08/06/2026"
+    },
+    {
+      "container": "DPWU200491",
+      "from": "29/05/2026",
+      "to": "11/06/2026"
+    },
+    {
+      "container": "DPWU201512",
+      "from": "24/05/2026",
+      "to": "08/06/2026"
+    }
   ],
   "total_containers": 3,
   "pages_processed": 6,
@@ -191,45 +209,45 @@ curl -X 'POST' \
 {
   "date": "08/06/2026",
   "containers": [
-    "BSIU314828",
-    "DPWU200491",
-    "DPWU201512",
-    "DPWU202048",
-    "DPWU202277",
-    "DPWU202406",
-    "DPWU203386",
-    "DPWU207991",
-    "DPWU212177",
-    "DPWU213015",
-    "DPWU214023",
-    "DPWU214845",
-    "DPWU215663",
-    "DPWU216085",
-    "DPWU216268",
-    "DPWU221602",
-    "DRYU286212",
-    "FYCU723869",
-    "FYCU724060",
-    "FYCU724092",
-    "LEGU201592",
-    "LEGU201628",
-    "LEGU201822",
-    "LEGU202374",
-    "LEGU202423",
-    "LEGU203017",
-    "LEGU203212",
-    "LEGU203363",
-    "LEGU203387",
-    "LEGU203446",
-    "LEGU203458",
-    "LEGU203716",
-    "LEGU203786",
-    "LEGU203920",
-    "SEGU234612",
-    "SEGU397342",
-    "SEKU113029",
-    "TIIU234250",
-    "TLLU361240"
+    {"container": "BSIU314828", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU200491", "from": "29/05/2026", "to": "11/06/2026"},
+    {"container": "DPWU201512", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU202048", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU202277", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU202406", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU203386", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU207991", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU212177", "from": "26/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU213015", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU214023", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU214845", "from": "26/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU215663", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "DPWU216085", "from": "29/05/2026", "to": "11/06/2026"},
+    {"container": "DPWU216268", "from": "27/05/2026", "to": "09/06/2026"},
+    {"container": "DPWU221602", "from": "27/05/2026", "to": "09/06/2026"},
+    {"container": "DRYU286212", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "FYCU723869", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "FYCU724060", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "FYCU724092", "from": "25/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU201592", "from": "26/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU201628", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU201822", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU202374", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU202423", "from": "29/05/2026", "to": "11/06/2026"},
+    {"container": "LEGU203017", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203212", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203363", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203387", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203446", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203458", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203716", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203786", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "LEGU203920", "from": "24/05/2026", "to": "08/06/2026"},
+    {"container": "SEGU234612", "from": "23/05/2026", "to": "08/06/2026"},
+    {"container": "SEGU397342", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "SEKU113029", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "TIIU234250", "from": "22/05/2026", "to": "08/06/2026"},
+    {"container": "TLLU361240", "from": "24/05/2026", "to": "08/06/2026"}
   ],
   "total_containers": 39,
   "pages_processed": 6,
@@ -260,9 +278,13 @@ curl -X 'POST' \
 ### containers
 
 - Extract values directly after visible `Container` labels in charge-description rows.
+- For each container, extract the closest following storage date range in the form `from <date> to <date>`.
+- Return each item as an object with `container`, `from`, and `to`.
 - Process all pages in document order.
 - Trim whitespace and remove spaces/hyphens inside container values.
 - Normalize to uppercase.
+- Normalize `from` and `to` dates to `DD/MM/YYYY`.
+- If a container is visible but its storage date range is unreadable, set `from` and `to` to `null`.
 - Accept four letters followed by six or seven digits.
 - Remove duplicates while preserving first-seen order.
 - Do not extract `CONTAINERS TaxCode` text as a container number.
