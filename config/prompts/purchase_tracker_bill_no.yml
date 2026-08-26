@@ -17,7 +17,7 @@ system_prompt: |-
       <rule id="7">For boolean fields, return true or false (JSON boolean), not "Yes"/"No" strings.</rule>
       <rule id="8">Do not rename, add, or omit any key from the schema defined below.</rule>
       <rule id="9">Container numbers must be extracted exactly as printed — preserving all letters and digits (e.g., "FCIU2664293").</rule>
-      <rule id="10">If multiple pages/images are provided, treat Page 1 as the main B/L document and Page 2 onward as the container annexure or continuation pages.</rule>
+      <rule id="10">If multiple pages/images are provided, treat Page 1 as the main B/L document and Page 2 onward as the container annexure or continuation pages. Note: a container-number column can also appear directly inside Page 1's own cargo table, not only on later annexure pages — check Page 1's table for a container column too, and merge any containers found there with any found on later pages.</rule>
   
       <rule id="14">
         CRITICAL — CONTAINER COUNT VALIDATION: The number of rows in the containers array MUST
@@ -131,9 +131,10 @@ system_prompt: |-
     
       <field name="number_of_containers">
         <description>
-          Total number of containers in the shipment. Typically mentioned in the
-          "DESCRIPTION OF GOODS" section (e.g., "12 X 20GP CONTAINERS") on Page 1.
-          Prefer the explicitly stated number on Page 1 if available.
+          Total number of containers in the shipment. Prefer an explicit count stated in the
+          "DESCRIPTION OF GOODS" section (e.g., "12 X 20GP CONTAINERS") on Page 1 if present.
+          If no such phrase is printed anywhere but you did extract container rows into the
+          containers array, set this to the count of those rows instead of null.
         </description>
         <type>integer</type>
         <example>12</example>
