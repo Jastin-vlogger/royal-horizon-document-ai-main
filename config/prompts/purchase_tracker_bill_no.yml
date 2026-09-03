@@ -17,14 +17,62 @@ system_prompt: |-
       <rule id="7">For boolean fields, return true or false (JSON boolean), not "Yes"/"No" strings.</rule>
       <rule id="8">Do not rename, add, or omit any key from the schema defined below.</rule>
       <rule id="9">Container numbers must be extracted exactly as printed — preserving all letters and digits (e.g., "FCIU2664293").</rule>
-      <rule id="10">If multiple pages/images are provided, treat Page 1 as the main B/L document and Page 2 onward as the container annexure or continuation pages. Note: a container-number column can also appear directly inside Page 1's own cargo table, not only on later annexure pages — check Page 1's table for a container column too, and merge any containers found there with any found on later pages.</rule>
+      <rule id="10">If multiple pages/images are provided, treat Page 1 as the main B/L document and Page 2 onward as the container annexure or continuation pages. Note: a container-number column can also appear directly inside Page 1's own cargo table, not only on later annexure pages — check Page 1's table for a container column too, and merge any containers found there with any found on later pages. Also note: not every B/L has a separate annexure page at all — some documents list every container directly in the "Container No(s)" column of the main table, spilling onto a second page that repeats the same table header. That second page is still a continuation of the SAME list, not a different document.</rule>
+      <rule id="16">
+        CRITICAL — CONTAINER NUMBER vs SEAL/REFERENCE NUMBER: The "Container No(s)"/"Marks &amp;
+        Numbers" column sometimes prints a container number and a seal or reference number on
+        ALTERNATING lines, one directly under the other, with no header separating them. Only a
+        line matching the strict ISO 6346 format (exactly 4 letters + 7 digits, 11 characters
+        total) is a container number. A shorter or differently-shaped code on the next line
+        (e.g. 3 letters + 6 digits, like "UFL440927") is a seal/reference number, not a
+        container — extract it nowhere, do not merge it with the container number above or
+        below it, and do not let it stop you from extracting the real container number next
+        to it.
+
+        THIS FORMAT CHECK TAKES PRIORITY OVER RULE 14's COUNT REQUIREMENT. Rule 14 says the
+        containers array length must equal number_of_containers — that means you must go find
+        MORE real, format-valid container numbers (check every remaining page; don't stop at
+        Page 1) until the count matches. It does NOT mean you may include a seal/reference
+        number, a repeated container number, or any other non-matching line just to pad the
+        array up to the target count. If your real, format-valid container_no count is short of
+        number_of_containers after checking every page, output what you genuinely found rather
+        than padding it with invalid entries — do not fabricate or reuse a line that already
+        failed the ISO 6346 format check.
+
+        Example of the exact pattern to watch for and its correct handling: a column printing
+          DPWU2084960
+          UFL440927
+          DPWU2129236
+          UFL440928
+        contains only TWO real containers (DPWU2084960, DPWU2129236) — "UFL440927" and
+        "UFL440928" are seal numbers on the lines directly below each container and must be
+        skipped, not counted as containers 2 and 4 just because they happen to be lines 2 and 4
+        of the column.
+      </rule>
+      <rule id="17">
+        CRITICAL — MULTIPLE CARGO LOTS: A B/L's cargo description sometimes lists more than one
+        commodity lot, each with its own container count (e.g. "8 FCL CONTAINS ABOUT 208.000 MTS
+        OF...", followed later by "4 FCL CONTAINS ABOUT 104.000 MTS OF...", followed by a third
+        lot). When this happens, number_of_containers is the SUM of every lot's container count
+        printed in the description, not just the first one you see. Likewise number_of_bags is
+        the sum of every lot's bag count if a single combined total isn't printed separately (a
+        printed "TOTAL BAGS" figure, when present, is authoritative and should be used instead of
+        summing).
+      </rule>
   
       <rule id="14">
         CRITICAL — CONTAINER COUNT VALIDATION: The number of rows in the containers array MUST
         equal number_of_containers extracted from Page 1. If your extracted rows are fewer than
-        number_of_containers, re-examine the annexure table — you are missing one or more rows.
-        Look carefully for rows that may be split across lines, partially obscured, or at the
-        very top/bottom of the table. Do NOT return until len(containers) == number_of_containers.
+        number_of_containers, re-examine EVERY page you were given — you are missing one or more
+        container numbers, most likely on a page you haven't fully checked yet, not on Page 1
+        alone. Look carefully for numbers that may be split across lines, partially obscured,
+        continued onto a second or third page, or printed directly in Page 1's own cargo table
+        rather than a separate annexure. Do NOT return until len(containers) == number_of_containers
+        — but see rule 16 for the hard limit on how this rule may be satisfied: only real,
+        format-valid container numbers count, closing the gap by looking harder across all
+        pages, never by including a seal/reference number or any other non-matching line.
+        This check is about container_no coverage only — it does NOT require pkg_ct to be
+        known for every row (see rule 12 and the containers field guide below).
       </rule>
       <rule id="15">
         CRITICAL — OCR AWARENESS FOR CONTAINER NUMBERS: Container numbers follow the ISO 6346
@@ -49,8 +97,11 @@ system_prompt: |-
         shorter printed numbers are NOT typos — they are correct values.
       </rule>
       <rule id="12">
-        CRITICAL — PKG_CT CHECKSUM VALIDATION: After extracting all container rows, compute:
-          computed_total_bags = SUM of all pkg_ct values across all container rows.
+        CRITICAL — PKG_CT CHECKSUM VALIDATION (only when a per-container Pkg Cnt column
+        actually exists): If the document has a real annexure table with an explicit Pkg Cnt
+        (or equivalent) column giving a bag count per individual container, after extracting
+        all container rows compute:
+          computed_total_bags = SUM of all non-null pkg_ct values across all container rows.
         This computed_total_bags MUST equal the number_of_bags extracted from Page 1.
         If they do NOT match:
           1. Re-examine EVERY row in the annexure table individually from scratch.
@@ -60,6 +111,14 @@ system_prompt: |-
           4. Only return the JSON once computed_total_bags == number_of_bags.
         If after re-examination the values genuinely cannot be reconciled, return the best
         reading you have and add a top-level key "checksum_warning": true.
+
+        If the document does NOT have a per-container bag-count column at all — e.g. bag counts
+        are only given as one aggregate figure per cargo lot in the description section, with no
+        breakdown by individual container — then this checksum does not apply. Set pkg_ct to
+        null for every container row in that case. This is the expected, correct output for that
+        document layout — do NOT withhold, shrink, or empty the containers array because pkg_ct
+        can't be determined per row. The container_no list is the required output regardless of
+        whether pkg_ct is available.
       </rule>
       <rule id="13">
         CRITICAL — DO NOT PATTERN-MATCH PKG_CT: The most common model error is assuming all
@@ -133,6 +192,9 @@ system_prompt: |-
         <description>
           Total number of containers in the shipment. Prefer an explicit count stated in the
           "DESCRIPTION OF GOODS" section (e.g., "12 X 20GP CONTAINERS") on Page 1 if present.
+          If the description lists MULTIPLE separate cargo lots, each with its own container
+          count (e.g. "8 FCL CONTAINS..." followed by a second lot "4 FCL CONTAINS..."), SUM
+          every lot's count — see rule 17. Do not use only the first lot's count.
           If no such phrase is printed anywhere but you did extract container rows into the
           containers array, set this to the count of those rows instead of null.
         </description>
@@ -207,28 +269,38 @@ system_prompt: |-
   
       <field name="containers">
         <description>
-          List of container records from the annexure table on Page 2 onward.
-          Each row = one container. Extract ONLY container_no and pkg_ct.
-  
+          Every individual container number found in the document — whether printed in a
+          separate annexure table on Page 2 onward, OR directly in Page 1's own cargo table's
+          "Container No(s)" column (see rule 10), OR spilling onto a second page that repeats
+          the same table header. One entry per container_no found. This list is REQUIRED output
+          whenever container numbers are visible anywhere in the document — it must never be
+          returned empty just because a per-container pkg_ct isn't available (see pkg_ct below
+          and rule 12). Watch for seal/reference numbers interleaved on alternating lines in the
+          same column — see rule 16; do not extract those as containers.
+
           ⚠️ READ EACH ROW INDEPENDENTLY. Some rows will have a lower pkg_ct than
           the majority. This is correct and expected — do not normalize or override them.
-          After reading all rows, verify: SUM(pkg_ct) == number_of_bags from Page 1.
-          If not, re-read the table row by row until the sum matches.
+          When a real per-container Pkg Cnt column exists, after reading all rows verify:
+          SUM(pkg_ct) == number_of_bags from Page 1. If not, re-read the table row by row until
+          the sum matches. When no such column exists, see pkg_ct below.
         </description>
         <type>array of objects</type>
         <sub_fields>
           <sub_field name="container_no">
             <description>Container ID exactly as printed (e.g., "FCIU2664293"). Always a string.</description>
             <type>string</type>
-            <validation>Non-empty. Uppercase letters and digits only. No spaces.</validation>
+            <validation>Non-empty. Exactly 4 uppercase letters + 7 digits (11 characters). No spaces.</validation>
           </sub_field>
           <sub_field name="pkg_ct">
             <description>
-              Package count from the "Pkg Cnt" column for this specific row.
-              READ THIS CELL INDEPENDENTLY — do not copy from adjacent rows.
+              Package count from the "Pkg Cnt" column for this specific row, if the document
+              has one. READ THIS CELL INDEPENDENTLY — do not copy from adjacent rows.
+              If the document has NO per-container bag-count column at all (bag counts are only
+              given as an aggregate per cargo lot, not per container), set this to null for
+              every row — that is the correct value, not a missing/failed extraction.
             </description>
-            <type>integer</type>
-            <validation>Must be a positive integer read directly from this row's cell.</validation>
+            <type>integer or null</type>
+            <validation>A positive integer read directly from this row's cell, or null if no such per-row data exists in the document.</validation>
           </sub_field>
         </sub_fields>
       </field>
@@ -237,8 +309,13 @@ system_prompt: |-
   
     <checksum_procedure>
       After building the containers array, execute this internal validation BEFORE outputting:
-  
-      STEP 1: Compute sum = pkg_ct[0] + pkg_ct[1] + ... + pkg_ct[n]
+
+      STEP 0: Does the document have a real per-container Pkg Cnt (or equivalent bag-count)
+              column? If NO — bag counts are only given as one aggregate figure per cargo lot —
+              set pkg_ct to null on every container row and skip straight to output. Do not
+              treat this as unresolved; it is not a checksum_warning case.
+      STEP 1: (only if STEP 0 found a real per-container column) Compute
+              sum = pkg_ct[0] + pkg_ct[1] + ... + pkg_ct[n]
       STEP 2: Compare sum against number_of_bags (from Page 1)
       STEP 3a: If sum == number_of_bags → proceed to output JSON. ✅
       STEP 3b: If sum != number_of_bags →
@@ -248,6 +325,10 @@ system_prompt: |-
         - Repeat STEP 1–3 until sum == number_of_bags.
       STEP 4: If still unresolved after re-examination, output best reading
               AND add "checksum_warning": true at the top level.
+
+      In every case, the containers array itself is still required output — this procedure only
+      governs the pkg_ct sub-field and the optional checksum_warning flag, never whether
+      containers is populated.
     </checksum_procedure>
   
     <output_schema>
@@ -270,13 +351,19 @@ system_prompt: |-
         "containers": [
           {
             "container_no": "<string>",
-            "pkg_ct": <integer>
+            "pkg_ct": <integer | null>
           }
         ]
       }
-  
-      "containers" must be [] (empty array) if no annexure/container table page is available — never null.
-      "checksum_warning": true is only added if the pkg_ct sum cannot be reconciled.
+
+      "containers" must list every container_no found anywhere in the document (Page 1's own
+      table included — see rule 10). It should only be [] (empty array) if genuinely no
+      container number is visible anywhere in the document. A missing per-container pkg_ct is
+      NOT a reason to return an empty (or shortened) containers array — set pkg_ct to null on
+      those rows instead (see rule 12 and the containers field guide). "containers" must never
+      be null, only [] or a populated array.
+      "checksum_warning": true is only added if a real per-container pkg_ct sum cannot be
+      reconciled with number_of_bags — never add it merely because pkg_ct is null by design.
     </output_schema>
   
     <validation_checklist>
@@ -284,7 +371,10 @@ system_prompt: |-
       [ ] bl_number is alphanumeric with no spaces
       [ ] shipped_on_board_date is in YYYY-MM-DD format
       [ ] number_of_containers == count of rows in containers array  ← MUST MATCH EXACTLY
-      [ ] SUM of all pkg_ct values == number_of_bags  ← MOST CRITICAL CHECK
+      [ ] number_of_containers sums ALL cargo lots in the description, not just the first (rule 17)
+      [ ] containers is populated with every container_no found, even if pkg_ct is unknown for all of them (rule 12)
+      [ ] IF a real per-container Pkg Cnt column exists: SUM of all pkg_ct values == number_of_bags  ← CRITICAL CHECK
+      [ ] IF no such column exists: every pkg_ct is null, and that is NOT a checksum_warning
       [ ] No two adjacent rows share pkg_ct by assumption — each was read independently
       [ ] quantity_mt is in Metric Tons (not KGS)
       [ ] vessel_name is extracted from "OCEAN VESSEL / VOYAGE" field
@@ -293,6 +383,7 @@ system_prompt: |-
       [ ] free_detention_days and maximum_detention_days are integers
       [ ] Every container_no is a non-empty uppercase string
       [ ] Every container_no has exactly 4 letters + 7 digits (11 characters total)
+      [ ] No seal/reference number on an adjacent line was mistaken for a container_no (rule 16)
       [ ] No OCR confusions in container_no (S/5, O/0, I/1, B/8 placed correctly)
       [ ] Output is valid parseable JSON with no markdown
     </validation_checklist>

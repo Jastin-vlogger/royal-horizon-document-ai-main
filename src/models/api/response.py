@@ -116,7 +116,15 @@ class BillOfLadingContainerRow(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     container_no: str = Field(..., description="Container ID as printed (e.g. FCIU2664293).")
-    pkg_ct: int = Field(..., description="Package count from the Pkg Cnt column for this row.")
+    pkg_ct: Optional[int] = Field(
+        default=None,
+        description=(
+            "Package count from the Pkg Cnt column for this row. Not every B/L prints a "
+            "per-container bag count (some only give an aggregate count per cargo lot in the "
+            "description section) — null here means that count genuinely isn't available for "
+            "this container, not a parse failure."
+        ),
+    )
 
     @field_validator("container_no", mode="before")
     @classmethod
